@@ -6,35 +6,87 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"os"
 
-	"github.com/rancher/migration-agent/pkg/foo"
-	"github.com/rancher/migration-agent/pkg/generated/controllers/some.api.group"
+	"github.com/rancher/migration-agent/pkg/migrate"
 	"github.com/rancher/wrangler/pkg/kubeconfig"
 	"github.com/rancher/wrangler/pkg/signals"
-	"github.com/rancher/wrangler/pkg/start"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
 
 var (
-	Version    = "v0.0.0-dev"
-	GitCommit  = "HEAD"
-	KubeConfig string
+	Version   = "v0.0.0-dev"
+	GitCommit = "HEAD"
+	config    migrate.MigrationConfig
 )
 
 func main() {
 	app := cli.NewApp()
-	app.Name = "testy"
+	app.Name = "migration-agent"
 	app.Version = fmt.Sprintf("%s (%s)", Version, GitCommit)
-	app.Usage = "testy needs help!"
+	app.Usage = "Agent migrates rke files and data node to rke2"
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:        "kubeconfig",
 			EnvVar:      "KUBECONFIG",
-			Destination: &KubeConfig,
+			Destination: &config.KubeConfig,
+		},
+		cli.StringFlag{
+			Name:        "data-dir",
+			EnvVar:      "DATADIR",
+			Destination: &config.DataDir,
+			Value:       "/var/lib/rancher/rke2",
+		},
+		cli.StringFlag{
+			Name:        "snapshot",
+			EnvVar:      "SNAPSHOT",
+			Destination: &config.Snapshot,
+		},
+		&cli.StringFlag{
+			Name:        "s3-endpoint",
+			Usage:       "S3 endpoint url",
+			Destination: &config.EtcdS3Endpoint,
+			Value:       "s3.amazonaws.com",
+		},
+		&cli.StringFlag{
+			Name:        "s3-endpoint-ca",
+			Usage:       "S3 custom CA cert to connect to S3 endpoint",
+			Destination: &config.EtcdS3EndpointCA,
+		},
+		&cli.BoolFlag{
+			Name:        "s3-skip-ssl-verify",
+			Usage:       "Disables S3 SSL certificate validation",
+			Destination: &config.EtcdS3SkipSSLVerify,
+		},
+		&cli.StringFlag{
+			Name:        "s3-access-key",
+			Usage:       "S3 access key",
+			EnvVar:      "AWS_ACCESS_KEY_ID",
+			Destination: &config.EtcdS3AccessKey,
+		},
+		&cli.StringFlag{
+			Name:        "s3-secret-key",
+			Usage:       "S3 secret key",
+			EnvVar:      "AWS_SECRET_ACCESS_KEY",
+			Destination: &config.EtcdS3SecretKey,
+		},
+		&cli.StringFlag{
+			Name:        "s3-bucket",
+			Usage:       "S3 bucket name",
+			Destination: &config.EtcdS3BucketName,
+		},
+		&cli.StringFlag{
+			Name:        "s3-region",
+			Usage:       "S3 region / bucket location (optional)",
+			Destination: &config.EtcdS3Region,
+			Value:       "us-east-1",
+		},
+		&cli.StringFlag{
+			Name:        "s3-folder",
+			Usage:       "S3 folder",
+			Destination: &config.EtcdS3Folder,
 		},
 	}
 	app.Action = run
@@ -45,25 +97,30 @@ func main() {
 }
 
 func run(c *cli.Context) {
-	flag.Parse()
-
-	logrus.Info("Starting controller")
+	logrus.Info("Starting agent")
 	ctx := signals.SetupSignalHandler(context.Background())
 
-	kubeConfig, err := kubeconfig.GetNonInteractiveClientConfig(KubeConfig).ClientConfig()
+	kubeConfig, err := kubeconfig.GetNonInteractiveClientConfig(config.KubeConfig).ClientConfig()
 	if err != nil {
 		logrus.Fatalf("failed to find kubeconfig: %v", err)
 	}
 
-	foos, err := some.NewFactoryFromConfig(kubeConfig)
+	sc, err := migrate.NewContext(ctx, kubeConfig)
 	if err != nil {
-		logrus.Fatalf("Error building sample controllers: %s", err.Error())
+		logrus.Fatalf("failed to find establish kubernetes connection: %v", err)
 	}
 
-	foo.Register(ctx, foos.Some().V1().Foo())
+	if err := sc.Start(ctx); err != nil {
+		logrus.Fatalf("failed to start factories: %v", err)
+	}
 
-	if err := start.All(ctx, 2, foos); err != nil {
-		logrus.Fatalf("Error starting: %s", err.Error())
+	agent, err := migrate.New(ctx, sc, &config)
+	if err != nil {
+		logrus.Fatalf("failed to create a migration agent on node: %v", err)
+	}
+
+	if err := agent.Do(ctx); err != nil {
+		logrus.Fatalf("failed to run migrate on node: %v", err)
 	}
 
 	<-ctx.Done()
