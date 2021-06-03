@@ -44,22 +44,22 @@ replace (
 	k8s.io/sample-cli-plugin => github.com/k3s-io/kubernetes/staging/src/k8s.io/sample-cli-plugin v1.20.2-k3s1
 	k8s.io/sample-controller => github.com/k3s-io/kubernetes/staging/src/k8s.io/sample-controller v1.20.2-k3s1
 	mvdan.cc/unparam => mvdan.cc/unparam v0.0.0-20190209190245-fbb59629db34
-
+	sigs.k8s.io/yaml => github.com/kubernetes-sigs/yaml v1.2.0
 )
 
 require (
-	github.com/google/cadvisor v0.38.6
-	github.com/google/uuid v1.2.0
 	github.com/pkg/errors v0.9.1
 	github.com/rancher/k3s v1.20.3-0.20210402005909-a3ec5904ec2c
 	github.com/rancher/lasso v0.0.0-20200905045615-7fcb07d6a20b // indirect
 	github.com/rancher/rke v1.2.7
-	github.com/rancher/wrangler v0.6.2-0.20200515155908-1923f3f8ec3f
+	github.com/rancher/wrangler v0.6.2
 	github.com/rancher/wrangler-api v0.6.0
 	github.com/sirupsen/logrus v1.8.1
 	github.com/urfave/cli v1.22.2
-	go.etcd.io/etcd v0.5.0-alpha.5.0.20201208200253-50621aee4aea
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 	k8s.io/api v1.20.5
 	k8s.io/apimachinery v1.20.5
 	k8s.io/client-go v12.0.0+incompatible
+	k8s.io/kubernetes v1.20.5
+	sigs.k8s.io/yaml v1.2.0
 )

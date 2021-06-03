@@ -88,6 +88,11 @@ func main() {
 			Usage:       "S3 folder",
 			Destination: &config.EtcdS3Folder,
 		},
+		&cli.StringFlag{
+			Name:        "node-name",
+			Usage:       "Node Name",
+			Destination: &config.NodeName,
+		},
 	}
 	app.Action = run
 
@@ -123,5 +128,5 @@ func run(c *cli.Context) {
 		logrus.Fatalf("failed to run migrate on node: %v", err)
 	}
 
-	<-ctx.Done()
+	logrus.Infof("Node has been migrated successfully")
 }

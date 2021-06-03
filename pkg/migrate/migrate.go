@@ -40,13 +40,20 @@ func (a *agent) Do(ctx context.Context) error {
 		if err := certs.RecoverCertsFromState(ctx, a.controlConfig, a.fullState); err != nil {
 			return err
 		}
-		if err := migrationconfig.ExportClusterConfiguration(ctx, a.fullState, a.sc.Core.Core().V1().ConfigMap()); err != nil {
+		if err := migrationconfig.ExportClusterConfiguration(ctx, a.fullState, a.sc.Core.Core().V1().ConfigMap(), a.nodeName); err != nil {
 			return err
 		}
 	}
 	if a.isETCD {
 		// Do snapshot restore on the node
 		if err := etcdmigrate.Restore(ctx, a.controlConfig, a.fullState.CurrentState.CertificatesBundle[pki.KubeAPICertName]); err != nil {
+			return err
+		}
+	}
+
+	// add the remove old addons job
+	if a.isControlPlane {
+		if err := migrationconfig.RemoveOldAddons(ctx, a.dataDir); err != nil {
 			return err
 		}
 	}
@@ -78,7 +85,7 @@ func New(ctx context.Context, sc *Context, config *MigrationConfig) (*agent, err
 		return nil, err
 	}
 	// find the node roles
-	node, err := findNode(ctx, fullState, k3sConfig, sc)
+	node, err := findNode(ctx, fullState, k3sConfig, sc, config.NodeName)
 	if err != nil {
 		return nil, err
 	}
@@ -105,6 +112,7 @@ func New(ctx context.Context, sc *Context, config *MigrationConfig) (*agent, err
 		isETCD:         etcd,
 		isWorker:       worker,
 		isControlPlane: controlplane,
+		nodeName:       node.HostnameOverride,
 	}, nil
 }
 
@@ -142,11 +150,10 @@ func extractSnapshot(ctx context.Context, snapshotPath string) (string, *cluster
 	return snapshot, fullState, nil
 }
 
-func findNode(ctx context.Context, fullState *cluster.FullState, config *config.Control, sc *Context) (*types.RKEConfigNode, error) {
+func findNode(ctx context.Context, fullState *cluster.FullState, config *config.Control, sc *Context, overrideNodeName string) (*types.RKEConfigNode, error) {
 	rkeNodes := fullState.CurrentState.RancherKubernetesEngineConfig.Nodes
 	// find name by IP, then hostname
 	nodeName, nodeIP, err := getHostnameAndIP()
-	logrus.Infof("node ip %v nodeName %v", nodeIP, nodeName)
 	if err != nil {
 		return nil, err
 	}
@@ -154,6 +161,9 @@ func findNode(ctx context.Context, fullState *cluster.FullState, config *config.
 		logrus.Infof("address: %v", node.Address)
 		logrus.Infof("internal address: %v", node.InternalAddress)
 		logrus.Infof("hostname: %v", node.HostnameOverride)
+		if overrideNodeName == node.Address || overrideNodeName == node.InternalAddress || overrideNodeName == node.HostnameOverride {
+			return &node, nil
+		}
 		if node.Address == nodeIP || node.InternalAddress == nodeIP || node.HostnameOverride == nodeName {
 			config.PrivateIP = nodeIP
 			return &node, nil
@@ -173,7 +183,6 @@ func findNode(ctx context.Context, fullState *cluster.FullState, config *config.
 	for _, node := range nodes.Items {
 		for _, annotation := range IPAnnotations {
 			if v, ok := node.Annotations[annotation]; ok {
-				logrus.Infof("v %v", v)
 				if strings.Contains(v, nodeIP) {
 					return k8sNodeToRKENode(&node, rkeNodes)
 				}
