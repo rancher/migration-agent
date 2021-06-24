@@ -198,6 +198,11 @@ func job() *batch.Job {
 			Operator: core.TolerationOpExists,
 			Effect:   core.TaintEffectNoSchedule,
 		},
+		{
+			Key:      "node-role.kubernetes.io/controlplane",
+			Operator: core.TolerationOpExists,
+			Effect:   core.TaintEffectNoSchedule,
+		},
 	}
 	job.Spec.Template.Spec.NodeSelector = make(map[string]string)
 	job.Spec.Template.Spec.NodeSelector["node-role.kubernetes.io/control-plane"] = "true"

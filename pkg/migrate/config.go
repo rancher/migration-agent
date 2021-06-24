@@ -12,5 +12,6 @@ type MigrationConfig struct {
 	EtcdS3Region        string
 	EtcdS3BucketName    string
 	EtcdS3Folder        string
-	NodeName			string
+	NodeName            string
+	DisableETCDRestore  bool
 }

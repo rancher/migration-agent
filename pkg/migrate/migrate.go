@@ -23,15 +23,16 @@ import (
 )
 
 type agent struct {
-	isETCD         bool
-	isControlPlane bool
-	isWorker       bool
-	nodeName       string
-	fullState      *cluster.FullState
-	snapshotPath   string
-	dataDir        string
-	controlConfig  *config.Control
-	sc             *Context
+	isETCD             bool
+	isControlPlane     bool
+	isWorker           bool
+	nodeName           string
+	fullState          *cluster.FullState
+	snapshotPath       string
+	dataDir            string
+	controlConfig      *config.Control
+	sc                 *Context
+	disableETCDRestore bool
 }
 
 func (a *agent) Do(ctx context.Context) error {
@@ -40,11 +41,11 @@ func (a *agent) Do(ctx context.Context) error {
 		if err := certs.RecoverCertsFromState(ctx, a.controlConfig, a.fullState); err != nil {
 			return err
 		}
-		if err := migrationconfig.ExportClusterConfiguration(ctx, a.fullState, a.sc.Core.Core().V1().ConfigMap(), a.nodeName); err != nil {
+		if err := migrationconfig.ExportClusterConfiguration(ctx, a.fullState, a.nodeName); err != nil {
 			return err
 		}
 	}
-	if a.isETCD {
+	if a.isETCD && !a.disableETCDRestore {
 		// Do snapshot restore on the node
 		if err := etcdmigrate.Restore(ctx, a.controlConfig, a.fullState.CurrentState.CertificatesBundle[pki.KubeAPICertName]); err != nil {
 			return err
@@ -58,11 +59,20 @@ func (a *agent) Do(ctx context.Context) error {
 		}
 	}
 
+	if a.isWorker && !(a.isControlPlane || a.isETCD) {
+		// configure kubeproxy pod to work without rke2 installed
+		// by dropping a kubeconfig for kubeproxy
+		if err := migrationconfig.ExportKubeProxyConfig(a.fullState, a.dataDir); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
-func New(ctx context.Context, sc *Context, config *MigrationConfig) (*agent, error) {
+func New(ctx context.Context, sc *Context, config *MigrationConfig, k8sConn bool) (*agent, error) {
 	k3sConfig := get(config)
+	snapshotPath := config.Snapshot
 
 	// download s3 config if set
 	if config.EtcdS3BucketName != "" {
@@ -73,9 +83,9 @@ func New(ctx context.Context, sc *Context, config *MigrationConfig) (*agent, err
 		if err := s3.Download(ctx); err != nil {
 			return nil, err
 		}
+		snapshotPath = filepath.Join(config.DataDir, "server", "db", "snapshots", config.Snapshot)
 	}
-
-	if _, err := os.Stat(config.Snapshot); err != nil {
+	if _, err := os.Stat(snapshotPath); err != nil {
 		return nil, err
 	}
 
@@ -85,7 +95,7 @@ func New(ctx context.Context, sc *Context, config *MigrationConfig) (*agent, err
 		return nil, err
 	}
 	// find the node roles
-	node, err := findNode(ctx, fullState, k3sConfig, sc, config.NodeName)
+	node, err := findNode(ctx, fullState, k3sConfig, sc, config.NodeName, k8sConn)
 	if err != nil {
 		return nil, err
 	}
@@ -104,15 +114,16 @@ func New(ctx context.Context, sc *Context, config *MigrationConfig) (*agent, err
 	}
 
 	return &agent{
-		fullState:      fullState,
-		snapshotPath:   snapshot,
-		dataDir:        config.DataDir,
-		controlConfig:  k3sConfig,
-		sc:             sc,
-		isETCD:         etcd,
-		isWorker:       worker,
-		isControlPlane: controlplane,
-		nodeName:       node.HostnameOverride,
+		fullState:          fullState,
+		snapshotPath:       snapshot,
+		dataDir:            config.DataDir,
+		controlConfig:      k3sConfig,
+		sc:                 sc,
+		isETCD:             etcd,
+		isWorker:           worker,
+		isControlPlane:     controlplane,
+		nodeName:           node.HostnameOverride,
+		disableETCDRestore: config.DisableETCDRestore,
 	}, nil
 }
 
@@ -150,7 +161,7 @@ func extractSnapshot(ctx context.Context, snapshotPath string) (string, *cluster
 	return snapshot, fullState, nil
 }
 
-func findNode(ctx context.Context, fullState *cluster.FullState, config *config.Control, sc *Context, overrideNodeName string) (*types.RKEConfigNode, error) {
+func findNode(ctx context.Context, fullState *cluster.FullState, config *config.Control, sc *Context, overrideNodeName string, k8sConn bool) (*types.RKEConfigNode, error) {
 	rkeNodes := fullState.CurrentState.RancherKubernetesEngineConfig.Nodes
 	// find name by IP, then hostname
 	nodeName, nodeIP, err := getHostnameAndIP()
@@ -176,19 +187,22 @@ func findNode(ctx context.Context, fullState *cluster.FullState, config *config.
 		flannelPublicIPAnnotation,
 		calicoIPAnnotation,
 	}
-	nodes, err := sc.Core.Core().V1().Node().List(metav1.ListOptions{})
-	if err != nil {
-		return nil, err
-	}
-	for _, node := range nodes.Items {
-		for _, annotation := range IPAnnotations {
-			if v, ok := node.Annotations[annotation]; ok {
-				if strings.Contains(v, nodeIP) {
-					return k8sNodeToRKENode(&node, rkeNodes)
+	if k8sConn && sc != nil {
+		nodes, err := sc.Core.Core().V1().Node().List(metav1.ListOptions{})
+		if err != nil {
+			return nil, err
+		}
+		for _, node := range nodes.Items {
+			for _, annotation := range IPAnnotations {
+				if v, ok := node.Annotations[annotation]; ok {
+					if strings.Contains(v, nodeIP) {
+						return k8sNodeToRKENode(&node, rkeNodes)
+					}
 				}
 			}
 		}
 	}
+
 	return nil, fmt.Errorf("Cant find node in current state")
 }
 

@@ -93,6 +93,11 @@ func main() {
 			Usage:       "Node Name",
 			Destination: &config.NodeName,
 		},
+		&cli.BoolFlag{
+			Name:        "disable-etcd-restore",
+			Usage:       "Disable etcd restoration on the migrated node",
+			Destination: &config.DisableETCDRestore,
+		},
 	}
 	app.Action = run
 
@@ -110,16 +115,21 @@ func run(c *cli.Context) {
 		logrus.Fatalf("failed to find kubeconfig: %v", err)
 	}
 
+	var k8sConn bool
 	sc, err := migrate.NewContext(ctx, kubeConfig)
 	if err != nil {
-		logrus.Fatalf("failed to find establish kubernetes connection: %v", err)
+		if config.NodeName == "" {
+			logrus.Fatalf("failed to find establish kubernetes connection and node-name is empty: %v", err)
+		}
+		logrus.Warnf("failed to establish kubernetes connection, will use node-name statically")
+	} else {
+		k8sConn = true
+		if err := sc.Start(ctx); err != nil {
+			logrus.Fatalf("failed to start factories: %v", err)
+		}
 	}
 
-	if err := sc.Start(ctx); err != nil {
-		logrus.Fatalf("failed to start factories: %v", err)
-	}
-
-	agent, err := migrate.New(ctx, sc, &config)
+	agent, err := migrate.New(ctx, sc, &config, k8sConn)
 	if err != nil {
 		logrus.Fatalf("failed to create a migration agent on node: %v", err)
 	}
