@@ -9,6 +9,8 @@ import (
 
 	"sigs.k8s.io/yaml"
 
+	"github.com/rancher/k3s/pkg/cli/cmds"
+	daemonconfig "github.com/rancher/k3s/pkg/daemons/config"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 )
 
@@ -17,6 +19,7 @@ var (
 )
 
 type Executor interface {
+	Bootstrap(ctx context.Context, nodeConfig *daemonconfig.Node, cfg cmds.Agent) error
 	Kubelet(args []string) error
 	KubeProxy(args []string) error
 	APIServer(ctx context.Context, etcdReady <-chan struct{}, args []string) (authenticator.Request, http.Handler, error)
@@ -24,6 +27,7 @@ type Executor interface {
 	ControllerManager(apiReady <-chan struct{}, args []string) error
 	CurrentETCDOptions() (InitialOptions, error)
 	ETCD(args ETCDConfig) error
+	CloudControllerManager(ccmRBACReady <-chan struct{}, args []string) error
 }
 
 type ETCDConfig struct {
@@ -81,6 +85,10 @@ func Set(driver Executor) {
 	executor = driver
 }
 
+func Bootstrap(ctx context.Context, nodeConfig *daemonconfig.Node, cfg cmds.Agent) error {
+	return executor.Bootstrap(ctx, nodeConfig, cfg)
+}
+
 func Kubelet(args []string) error {
 	return executor.Kubelet(args)
 }
@@ -107,4 +115,8 @@ func CurrentETCDOptions() (InitialOptions, error) {
 
 func ETCD(args ETCDConfig) error {
 	return executor.ETCD(args)
+}
+
+func CloudControllerManager(ccmRBACReady <-chan struct{}, args []string) error {
+	return executor.CloudControllerManager(ccmRBACReady, args)
 }

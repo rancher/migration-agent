@@ -294,7 +294,7 @@ func genClientCerts(config *config.Control, runtime *config.ControlRuntime) erro
 		return err
 	}
 
-	certGen, err = factory("cloud-controller-manager", nil, runtime.ClientCloudControllerCert, runtime.ClientCloudControllerKey)
+	certGen, err = factory(version.Program+"-cloud-controller-manager", nil, runtime.ClientCloudControllerCert, runtime.ClientCloudControllerKey)
 	if err != nil {
 		return err
 	}
@@ -319,7 +319,7 @@ func genServerCerts(config *config.Control, runtime *config.ControlRuntime) erro
 	}
 
 	altNames := &certutil.AltNames{
-		DNSNames: []string{"kubernetes.default.svc", "kubernetes.default", "kubernetes", "localhost"},
+		DNSNames: []string{"localhost", "kubernetes", "kubernetes.default", "kubernetes.default.svc", "kubernetes.default.svc." + config.ClusterDomain},
 		IPs:      []net.IP{apiServerServiceIP},
 	}
 

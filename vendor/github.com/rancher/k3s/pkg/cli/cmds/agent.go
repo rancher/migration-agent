@@ -20,8 +20,8 @@ type Agent struct {
 	LBServerPort             int
 	ResolvConf               string
 	DataDir                  string
-	NodeIP                   string
-	NodeExternalIP           string
+	NodeIP                   cli.StringSlice
+	NodeExternalIP           cli.StringSlice
 	NodeName                 string
 	PauseImage               string
 	Snapshotter              string
@@ -36,12 +36,16 @@ type Agent struct {
 	WithNodeID               bool
 	EnableSELinux            bool
 	ProtectKernelDefaults    bool
+	ClusterReset             bool
 	PrivateRegistry          string
+	SystemDefaultRegistry    string
 	AirgapExtraRegistry      cli.StringSlice
 	ExtraKubeletArgs         cli.StringSlice
 	ExtraKubeProxyArgs       cli.StringSlice
 	Labels                   cli.StringSlice
 	Taints                   cli.StringSlice
+	ImageCredProvBinDir      string
+	ImageCredProvConfig      string
 	AgentShared
 }
 
@@ -52,15 +56,15 @@ type AgentShared struct {
 var (
 	appName     = filepath.Base(os.Args[0])
 	AgentConfig Agent
-	NodeIPFlag  = cli.StringFlag{
-		Name:        "node-ip,i",
-		Usage:       "(agent/networking) IP address to advertise for node",
-		Destination: &AgentConfig.NodeIP,
+	NodeIPFlag  = cli.StringSliceFlag{
+		Name:  "node-ip,i",
+		Usage: "(agent/networking) IPv4/IPv6 addresses to advertise for node",
+		Value: &AgentConfig.NodeIP,
 	}
-	NodeExternalIPFlag = cli.StringFlag{
-		Name:        "node-external-ip",
-		Usage:       "(agent/networking) External IP address to advertise for node",
-		Destination: &AgentConfig.NodeExternalIP,
+	NodeExternalIPFlag = cli.StringSliceFlag{
+		Name:  "node-external-ip",
+		Usage: "(agent/networking) IPv4/IPv6 external IP addresses to advertise for node",
+		Value: &AgentConfig.NodeExternalIP,
 	}
 	NodeNameFlag = cli.StringFlag{
 		Name:        "node-name",
@@ -99,13 +103,13 @@ var (
 		Name:        "pause-image",
 		Usage:       "(agent/runtime) Customized pause image for containerd or docker sandbox",
 		Destination: &AgentConfig.PauseImage,
-		Value:       "docker.io/rancher/pause:3.1",
+		Value:       DefaultPauseImage,
 	}
 	SnapshotterFlag = cli.StringFlag{
 		Name:        "snapshotter",
 		Usage:       "(agent/runtime) Override default containerd snapshotter",
 		Destination: &AgentConfig.Snapshotter,
-		Value:       "overlayfs",
+		Value:       DefaultSnapshotter,
 	}
 	FlannelFlag = cli.BoolFlag{
 		Name:        "no-flannel",
@@ -147,6 +151,18 @@ var (
 		Name:  "node-label",
 		Usage: "(agent/node) Registering and starting kubelet with set of labels",
 		Value: &AgentConfig.Labels,
+	}
+	ImageCredProvBinDirFlag = cli.StringFlag{
+		Name:        "image-credential-provider-bin-dir",
+		Usage:       "(agent/node) The path to the directory where credential provider plugin binaries are located",
+		Destination: &AgentConfig.ImageCredProvBinDir,
+		Value:       "/var/lib/rancher/credentialprovider/bin",
+	}
+	ImageCredProvConfigFlag = cli.StringFlag{
+		Name:        "image-credential-provider-config",
+		Usage:       "(agent/node) The path to the credential provider plugin config file",
+		Destination: &AgentConfig.ImageCredProvConfig,
+		Value:       "/var/lib/rancher/credentialprovider/config.yaml",
 	}
 	DisableSELinuxFlag = cli.BoolTFlag{
 		Name:   "disable-selinux",
@@ -227,6 +243,8 @@ func NewAgentCommand(action func(ctx *cli.Context) error) cli.Command {
 			WithNodeIDFlag,
 			NodeLabels,
 			NodeTaints,
+			ImageCredProvBinDirFlag,
+			ImageCredProvConfigFlag,
 			DockerFlag,
 			CRIEndpointFlag,
 			PauseImageFlag,

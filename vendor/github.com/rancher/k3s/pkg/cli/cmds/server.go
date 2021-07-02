@@ -10,19 +10,18 @@ import (
 const (
 	defaultSnapshotRentention    = 5
 	defaultSnapshotIntervalHours = 12
-	hideClusterFlags             = true
 )
 
 type Server struct {
-	ClusterCIDR          string
+	ClusterCIDR          cli.StringSlice
 	AgentToken           string
 	AgentTokenFile       string
 	Token                string
 	TokenFile            string
 	ClusterSecret        string
-	ServiceCIDR          string
+	ServiceCIDR          cli.StringSlice
 	ServiceNodePortRange string
-	ClusterDNS           string
+	ClusterDNS           cli.StringSlice
 	ClusterDomain        string
 	// The port which kubectl clients can access k8s
 	HTTPSPort int
@@ -54,6 +53,7 @@ type Server struct {
 	DefaultLocalStoragePath  string
 	DisableCCM               bool
 	DisableNPC               bool
+	DisableHelmController    bool
 	DisableKubeProxy         bool
 	DisableAPIServer         bool
 	DisableControllerManager bool
@@ -61,8 +61,8 @@ type Server struct {
 	ClusterInit              bool
 	ClusterReset             bool
 	ClusterResetRestorePath  string
-	RKE1Snapshot             bool
 	EncryptSecrets           bool
+	SystemDefaultRegistry    string
 	StartupHooks             []func(context.Context, <-chan struct{}, string) error
 	EtcdSnapshotName         string
 	EtcdDisableSnapshots     bool
@@ -79,12 +79,37 @@ type Server struct {
 	EtcdS3BucketName         string
 	EtcdS3Region             string
 	EtcdS3Folder             string
-	RemoveOldResources       bool
-	ConfigFile               string
 }
 
 var (
 	ServerConfig Server
+	ClusterCIDR  = cli.StringSliceFlag{
+		Name:  "cluster-cidr",
+		Usage: "(networking) IPv4/IPv6 network CIDRs to use for pod IPs (default: 10.42.0.0/16)",
+		Value: &ServerConfig.ClusterCIDR,
+	}
+	ServiceCIDR = cli.StringSliceFlag{
+		Name:  "service-cidr",
+		Usage: "(networking) IPv4/IPv6 network CIDRs to use for service IPs (default: 10.43.0.0/16)",
+		Value: &ServerConfig.ServiceCIDR,
+	}
+	ServiceNodePortRange = cli.StringFlag{
+		Name:        "service-node-port-range",
+		Usage:       "(networking) Port range to reserve for services with NodePort visibility",
+		Destination: &ServerConfig.ServiceNodePortRange,
+		Value:       "30000-32767",
+	}
+	ClusterDNS = cli.StringSliceFlag{
+		Name:  "cluster-dns",
+		Usage: "(networking) IPv4 Cluster IP for coredns service. Should be in your service-cidr range (default: 10.43.0.10)",
+		Value: &ServerConfig.ClusterDNS,
+	}
+	ClusterDomain = cli.StringFlag{
+		Name:        "cluster-domain",
+		Usage:       "(networking) Cluster Domain",
+		Destination: &ServerConfig.ClusterDomain,
+		Value:       "cluster.local",
+	}
 	ExtraAPIArgs = cli.StringSliceFlag{
 		Name:  "kube-apiserver-arg",
 		Usage: "(flags) Customized flag for kube-apiserver process",
@@ -99,36 +124,6 @@ var (
 		Name:  "kube-controller-manager-arg",
 		Usage: "(flags) Customized flag for kube-controller-manager process",
 		Value: &ServerConfig.ExtraControllerArgs,
-	}
-	ClusterCIDR = cli.StringFlag{
-		Name:        "cluster-cidr",
-		Usage:       "(networking) Network CIDR to use for pod IPs",
-		Destination: &ServerConfig.ClusterCIDR,
-		Value:       "10.42.0.0/16",
-	}
-	ServiceCIDR = cli.StringFlag{
-		Name:        "service-cidr",
-		Usage:       "(networking) Network CIDR to use for services IPs",
-		Destination: &ServerConfig.ServiceCIDR,
-		Value:       "10.43.0.0/16",
-	}
-	ServiceNodePortRange = cli.StringFlag{
-		Name:        "service-node-port-range",
-		Usage:       "(networking) Port range to reserve for services with NodePort visibility",
-		Destination: &ServerConfig.ServiceNodePortRange,
-		Value:       "30000-32767",
-	}
-	ClusterDNS = cli.StringFlag{
-		Name:        "cluster-dns",
-		Usage:       "(networking) Cluster IP for coredns service. Should be in your service-cidr range (default: 10.43.0.10)",
-		Destination: &ServerConfig.ClusterDNS,
-		Value:       "",
-	}
-	ClusterDomain = cli.StringFlag{
-		Name:        "cluster-domain",
-		Usage:       "(networking) Cluster Domain",
-		Destination: &ServerConfig.ClusterDomain,
-		Value:       "cluster.local",
 	}
 )
 
@@ -159,7 +154,7 @@ func NewServerCommand(action func(*cli.Context) error) cli.Command {
 			},
 			cli.StringFlag{
 				Name:        "advertise-address",
-				Usage:       "(listener) IP address that apiserver uses to advertise to members of the cluster (default: node-external-ip/node-ip)",
+				Usage:       "(listener) IPv4 address that apiserver uses to advertise to members of the cluster (default: node-external-ip/node-ip)",
 				Destination: &ServerConfig.AdvertiseIP,
 			},
 			cli.IntFlag{
@@ -169,7 +164,7 @@ func NewServerCommand(action func(*cli.Context) error) cli.Command {
 			},
 			cli.StringSliceFlag{
 				Name:  "tls-san",
-				Usage: "(listener) Add additional hostname or IP as a Subject Alternative Name in the TLS cert",
+				Usage: "(listener) Add additional hostnames or IPv4/IPv6 addresses as Subject Alternative Names on the server TLS cert",
 				Value: &ServerConfig.TLSSan,
 			},
 			cli.StringFlag{
@@ -213,8 +208,8 @@ func NewServerCommand(action func(*cli.Context) error) cli.Command {
 				EnvVar:      version.ProgramUpper + "_KUBECONFIG_MODE",
 			},
 			ExtraAPIArgs,
-			ExtraSchedulerArgs,
 			ExtraControllerArgs,
+			ExtraSchedulerArgs,
 			cli.StringSliceFlag{
 				Name:  "kube-cloud-controller-manager-arg",
 				Usage: "(flags) Customized flag for kube-cloud-controller-manager process",
@@ -268,7 +263,7 @@ func NewServerCommand(action func(*cli.Context) error) cli.Command {
 			},
 			&cli.IntFlag{
 				Name:        "etcd-snapshot-retention",
-				Usage:       "(db) Number of snapshots to retain",
+				Usage:       "(db) Number of snapshots to retain Default: 5",
 				Destination: &ServerConfig.EtcdSnapshotRetention,
 				Value:       defaultSnapshotRentention,
 			},
@@ -356,17 +351,25 @@ func NewServerCommand(action func(*cli.Context) error) cli.Command {
 				Destination: &ServerConfig.DisableNPC,
 			},
 			cli.BoolFlag{
-				Name:        "disable-api-server",
+				Name:        "disable-helm-controller",
+				Usage:       "(components) Disable Helm controller",
+				Destination: &ServerConfig.DisableHelmController,
+			},
+			cli.BoolFlag{
+				Name:        "disable-apiserver",
+				Hidden:      true,
 				Usage:       "(experimental/components) Disable running api server",
 				Destination: &ServerConfig.DisableAPIServer,
 			},
 			cli.BoolFlag{
 				Name:        "disable-controller-manager",
+				Hidden:      true,
 				Usage:       "(experimental/components) Disable running kube-controller-manager",
 				Destination: &ServerConfig.DisableControllerManager,
 			},
 			cli.BoolFlag{
 				Name:        "disable-etcd",
+				Hidden:      true,
 				Usage:       "(experimental/components) Disable running etcd",
 				Destination: &ServerConfig.DisableETCD,
 			},
@@ -374,6 +377,8 @@ func NewServerCommand(action func(*cli.Context) error) cli.Command {
 			WithNodeIDFlag,
 			NodeLabels,
 			NodeTaints,
+			ImageCredProvBinDirFlag,
+			ImageCredProvConfigFlag,
 			DockerFlag,
 			CRIEndpointFlag,
 			PauseImageFlag,
@@ -407,21 +412,18 @@ func NewServerCommand(action func(*cli.Context) error) cli.Command {
 			},
 			cli.StringFlag{
 				Name:        "server,s",
-				Hidden:      hideClusterFlags,
 				Usage:       "(experimental/cluster) Server to connect to, used to join a cluster",
 				EnvVar:      version.ProgramUpper + "_URL",
 				Destination: &ServerConfig.ServerURL,
 			},
 			cli.BoolFlag{
 				Name:        "cluster-init",
-				Hidden:      hideClusterFlags,
 				Usage:       "(experimental/cluster) Initialize a new cluster using embedded Etcd",
 				EnvVar:      version.ProgramUpper + "_CLUSTER_INIT",
 				Destination: &ServerConfig.ClusterInit,
 			},
 			cli.BoolFlag{
 				Name:        "cluster-reset",
-				Hidden:      hideClusterFlags,
 				Usage:       "(experimental/cluster) Forget all peers and become sole member of a new cluster",
 				EnvVar:      version.ProgramUpper + "_CLUSTER_RESET",
 				Destination: &ServerConfig.ClusterReset,
@@ -431,20 +433,16 @@ func NewServerCommand(action func(*cli.Context) error) cli.Command {
 				Usage:       "(db) Path to snapshot file to be restored",
 				Destination: &ServerConfig.ClusterResetRestorePath,
 			},
-			&cli.BoolFlag{
-				Name:        "rke1-snapshot",
-				Usage:       "(experimental/db) Enable rke1 snapshot restore",
-				Destination: &ServerConfig.RKE1Snapshot,
-			},
-			&cli.BoolFlag{
-				Name:        "remove-old-resources",
-				Usage:       "(experimental/cluster) Delete old resources restored from rke1 cluster",
-				Destination: &ServerConfig.RemoveOldResources,
-			},
 			cli.BoolFlag{
 				Name:        "secrets-encryption",
 				Usage:       "(experimental) Enable Secret encryption at rest",
 				Destination: &ServerConfig.EncryptSecrets,
+			},
+			cli.StringFlag{
+				Name:        "system-default-registry",
+				Usage:       "(image) Private registry to be used for all system images",
+				EnvVar:      version.ProgramUpper + "_SYSTEM_DEFAULT_REGISTRY",
+				Destination: &ServerConfig.SystemDefaultRegistry,
 			},
 			&SELinuxFlag,
 			LBServerPortFlag,
