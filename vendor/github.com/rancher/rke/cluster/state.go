@@ -182,6 +182,11 @@ func RebuildState(ctx context.Context, kubeCluster *Cluster, oldState *FullState
 		}
 		newState.DesiredState.CertificatesBundle = certBundle
 		newState.CurrentState = oldState.CurrentState
+
+		err = updateEncryptionConfig(kubeCluster, oldState, newState)
+		if err != nil {
+			return nil, err
+		}
 		return newState, nil
 	}
 
@@ -205,7 +210,7 @@ func (s *FullState) WriteStateFile(ctx context.Context, statePath string) error 
 		return fmt.Errorf("Failed to Marshal state object: %v", err)
 	}
 	logrus.Tracef("Writing state file: %s", stateFile)
-	if err := ioutil.WriteFile(statePath, stateFile, 0640); err != nil {
+	if err := ioutil.WriteFile(statePath, stateFile, 0600); err != nil {
 		return fmt.Errorf("Failed to write state file: %v", err)
 	}
 	log.Infof(ctx, "Successfully Deployed state file at [%s]", statePath)
@@ -341,7 +346,12 @@ func rebuildExistingState(ctx context.Context, kubeCluster *Cluster, oldState, n
 		return err
 	}
 	newState.DesiredState.CertificatesBundle = pkiCertBundle
-	if isEncryptionEnabled(rkeConfig) {
+	err := updateEncryptionConfig(kubeCluster, oldState, newState)
+	return err
+}
+
+func updateEncryptionConfig(kubeCluster *Cluster, oldState *FullState, newState *FullState) error {
+	if isEncryptionEnabled(&kubeCluster.RancherKubernetesEngineConfig) {
 		if oldState.DesiredState.EncryptionConfig != "" {
 			newState.DesiredState.EncryptionConfig = oldState.DesiredState.EncryptionConfig
 		} else {
@@ -351,6 +361,5 @@ func rebuildExistingState(ctx context.Context, kubeCluster *Cluster, oldState, n
 			}
 		}
 	}
-
 	return nil
 }

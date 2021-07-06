@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
 	"reflect"
 	"strings"
 	"time"
@@ -57,7 +58,7 @@ type Cluster struct {
 	InactiveHosts                    []*hosts.Host
 	K8sWrapTransport                 transport.WrapperFunc
 	KubeClient                       *kubernetes.Clientset
-	KubernetesServiceIP              net.IP
+	KubernetesServiceIP              []net.IP
 	LocalKubeConfigPath              string
 	LocalConnDialerFactory           hosts.DialerFactory
 	PrivateRegistriesMap             map[string]v3.PrivateRegistry
@@ -98,6 +99,7 @@ const (
 	NameLabel              = "name"
 
 	WorkerThreads = util.WorkerThreads
+	SELinuxLabel  = services.SELinuxLabel
 
 	serviceAccountTokenFileParam = "service-account-key-file"
 
@@ -512,10 +514,7 @@ func parseIngressConfig(clusterFile string, rkeConfig *v3.RancherKubernetesEngin
 	if err := parseIngressExtraVolumes(ingressMap, rkeConfig); err != nil {
 		return err
 	}
-	if err := parseIngressExtraVolumeMounts(ingressMap, rkeConfig); err != nil {
-		return err
-	}
-	return nil
+	return parseIngressExtraVolumeMounts(ingressMap, rkeConfig)
 }
 
 func parseDaemonSetUpdateStrategy(updateStrategyField interface{}) (*v3.DaemonSetUpdateStrategy, error) {
@@ -705,12 +704,10 @@ func InitClusterObject(ctx context.Context, rkeConfig *v3.RancherKubernetesEngin
 			EncryptionProviderFile: encryptConfig,
 		},
 	}
-	if !metadata.MetadataInitialized {
-		logrus.Debugf("metadataInitialized: [False] [%s]", rkeConfig.ClusterName)
+	if metadata.K8sVersionToRKESystemImages == nil {
 		if err := metadata.InitMetadata(ctx); err != nil {
 			return nil, err
 		}
-		logrus.Debugf("metadataInitialized: [%v] [%s]", metadata.MetadataInitialized, rkeConfig.ClusterName)
 	}
 	if len(c.ConfigPath) == 0 {
 		c.ConfigPath = pki.ClusterConfig
@@ -739,7 +736,7 @@ func InitClusterObject(ctx context.Context, rkeConfig *v3.RancherKubernetesEngin
 	}
 	// extract cluster network configuration
 	if err = c.setNetworkOptions(); err != nil {
-		return nil, fmt.Errorf("failed set network options: %v", err)
+		return nil, fmt.Errorf("Failed to set network options: %v", err)
 	}
 
 	// Register cloud provider
@@ -779,6 +776,12 @@ func (c *Cluster) SetupDialers(ctx context.Context, dailersOptions hosts.Dialers
 		c.K8sWrapTransport, err = hosts.BastionHostWrapTransport(c.BastionHost)
 		if err != nil {
 			return err
+		}
+		if c.BastionHost.IgnoreProxyEnvVars {
+			logrus.Debug("Unset http proxy environment variables")
+			for _, v := range util.ProxyEnvVars {
+				os.Unsetenv(v)
+			}
 		}
 	}
 	return nil
@@ -1094,10 +1097,7 @@ func RestartClusterPods(ctx context.Context, kubeCluster *Cluster) error {
 			return util.ErrList(errList)
 		})
 	}
-	if err := errgrp.Wait(); err != nil {
-		return err
-	}
-	return nil
+	return errgrp.Wait()
 }
 
 func IsLegacyKubeAPI(ctx context.Context, kubeCluster *Cluster) (bool, error) {

@@ -24,16 +24,16 @@ const (
 )
 
 var (
-	RKEVersion                        string
-	DefaultK8sVersion                 string
-	K8sVersionToTemplates             map[string]map[string]string
-	K8sVersionToRKESystemImages       map[string]v3.RKESystemImages
-	K8sVersionToServiceOptions        map[string]v3.KubernetesServicesOptions
-	K8sVersionToDockerVersions        map[string][]string
-	K8sVersionsCurrent                []string
-	K8sBadVersions                    = map[string]bool{}
+	RKEVersion                  string
+	DefaultK8sVersion           string
+	K8sVersionToTemplates       map[string]map[string]string
+	K8sVersionToRKESystemImages map[string]v3.RKESystemImages
+	K8sVersionToServiceOptions  map[string]v3.KubernetesServicesOptions
+	K8sVersionToDockerVersions  map[string][]string
+	K8sVersionsCurrent          []string
+	K8sBadVersions              = map[string]bool{}
+
 	K8sVersionToWindowsServiceOptions map[string]v3.KubernetesServicesOptions
-	MetadataInitialized               bool
 
 	c = http.Client{
 		Timeout: time.Second * 30,
@@ -44,9 +44,6 @@ var (
 func InitMetadata(ctx context.Context) error {
 	kdmMutex.Lock()
 	defer kdmMutex.Unlock()
-	if MetadataInitialized {
-		return nil
-	}
 	data, err := loadData()
 	if err != nil {
 		return fmt.Errorf("failed to load data.json, error: %v", err)
@@ -55,8 +52,6 @@ func InitMetadata(ctx context.Context) error {
 	initAddonTemplates(data)
 	initServiceOptions(data)
 	initDockerOptions(data)
-	MetadataInitialized = true
-	logrus.Debugf("metadata initialized successfully")
 	return nil
 }
 
@@ -95,7 +90,7 @@ func readFile(file string) ([]byte, error) {
 	return ioutil.ReadFile(file)
 }
 
-const RKEVersionDev = "v1.2.0-rc0"
+const RKEVersionDev = "v1.3.0-rc0"
 
 func initAddonTemplates(data kdm.Data) {
 	K8sVersionToTemplates = data.K8sVersionedTemplates

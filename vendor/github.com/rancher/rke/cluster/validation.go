@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/blang/semver"
 	"github.com/rancher/rke/log"
 	"github.com/rancher/rke/metadata"
 	"github.com/rancher/rke/pki"
 	"github.com/rancher/rke/services"
 	"github.com/rancher/rke/util"
-	"k8s.io/api/core/v1"
+	"github.com/sirupsen/logrus"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
@@ -44,6 +46,16 @@ func (c *Cluster) ValidateCluster(ctx context.Context) error {
 
 	// validate Ingress options
 	if err := validateIngressOptions(c); err != nil {
+		return err
+	}
+
+	// validate enabling CRIDockerd
+	if err := validateCRIDockerdOption(c); err != nil {
+		return err
+	}
+
+	// validate registry credential plugin
+	if err := validateRegistryAuthPlugin(c); err != nil {
 		return err
 	}
 
@@ -201,6 +213,31 @@ func validateNetworkOptions(c *Cluster) error {
 	if c.Network.Plugin == FlannelNetworkPlugin && c.Network.MTU != 0 {
 		return fmt.Errorf("Network plugin [%s] does not support configuring MTU", FlannelNetworkPlugin)
 	}
+	dualStack := false
+	serviceClusterRanges := strings.Split(c.Services.KubeAPI.ServiceClusterIPRange, ",")
+	if len(serviceClusterRanges) > 1 {
+		logrus.Debugf("Found more than 1 service cluster IP range, assuming dual stack")
+		dualStack = true
+	}
+	clusterCIDRs := strings.Split(c.Services.KubeController.ClusterCIDR, ",")
+	if len(clusterCIDRs) > 1 {
+		logrus.Debugf("Found more than 1 cluster CIDR, assuming dual stack")
+		dualStack = true
+	}
+	if dualStack {
+		IPv6CompatibleNetworkPluginFound := false
+		for _, networkPlugin := range IPv6CompatibleNetworkPlugins {
+			if c.Network.Plugin == networkPlugin {
+				logrus.Debugf("Found IPv6 compatible network plugin [%s] == [%s]", c.Network.Plugin, networkPlugin)
+				IPv6CompatibleNetworkPluginFound = true
+				break
+			}
+		}
+		if !IPv6CompatibleNetworkPluginFound {
+			return fmt.Errorf("Network plugin [%s] does not support IPv6 (dualstack)", c.Network.Plugin)
+		}
+	}
+
 	if c.Network.Plugin == AciNetworkPlugin {
 		//Skip cloud options and throw an error.
 		cloudOptionsList := []string{AciEpRegistry, AciOpflexMode, AciUseHostNetnsVolume, AciUseOpflexServerVolume,
@@ -308,11 +345,7 @@ func validateServicesOptions(c *Cluster) error {
 	}
 
 	// validate etcd s3 backup backend configurations
-	if err := validateEtcdBackupOptions(c); err != nil {
-		return err
-	}
-
-	return nil
+	return validateEtcdBackupOptions(c)
 }
 
 func validateEtcdBackupOptions(c *Cluster) error {
@@ -436,10 +469,7 @@ func validateSystemImages(c *Cluster) error {
 	if err := validateMetricsImages(c); err != nil {
 		return err
 	}
-	if err := validateIngressImages(c); err != nil {
-		return err
-	}
-	return nil
+	return validateIngressImages(c)
 }
 
 func validateKubernetesImages(c *Cluster) error {
@@ -579,6 +609,63 @@ func validateIngressImages(c *Cluster) error {
 		}
 		if len(c.SystemImages.IngressBackend) == 0 {
 			return errors.New("ingress backend image is not populated")
+		}
+		// Ingress Webhook image is used starting with k8s 1.21
+		k8sVersion := c.RancherKubernetesEngineConfig.Version
+		toMatch, err := semver.Make(k8sVersion[1:])
+		if err != nil {
+			return fmt.Errorf("%s is not valid semver", k8sVersion)
+		}
+		logrus.Debugf("Checking if ingress webhook image is required for cluster version [%s]", k8sVersion)
+
+		IngressWebhookImageRequiredRange, err := semver.ParseRange(">=1.21.0-rancher0")
+		if err != nil {
+			logrus.Warnf("Failed to parse semver range for checking required ingress webhook image")
+		}
+		if IngressWebhookImageRequiredRange(toMatch) {
+			logrus.Debugf("Cluster version [%s] uses ingress webhook image, checking if image is populated", k8sVersion)
+			if len(c.SystemImages.IngressWebhook) == 0 {
+				return errors.New("ingress webhook image is not populated")
+			}
+
+		}
+	}
+	return nil
+}
+
+func validateCRIDockerdOption(c *Cluster) error {
+	if c.EnableCRIDockerd != nil && *c.EnableCRIDockerd {
+		k8sVersion := c.RancherKubernetesEngineConfig.Version
+		toMatch, err := semver.Make(k8sVersion[1:])
+		if err != nil {
+			return fmt.Errorf("%s is not valid semver", k8sVersion)
+		}
+		logrus.Debugf("Checking cri-dockerd for cluster version [%s]", k8sVersion)
+		// cri-dockerd can be enabled for k8s 1.21 and up
+		CRIDockerdAllowedRange, err := semver.ParseRange(">=1.21.0-rancher0")
+		if err != nil {
+			logrus.Warnf("Failed to parse semver range for checking cri-dockerd")
+		}
+		if !CRIDockerdAllowedRange(toMatch) {
+			logrus.Debugf("Cluster version [%s] is not allowed to enable cri-dockerd", k8sVersion)
+			return fmt.Errorf("Enabling cri-dockerd for cluster version [%s] is not supported", k8sVersion)
+		}
+		logrus.Infof("cri-dockerd is enabled for cluster version [%s]", k8sVersion)
+	}
+	return nil
+}
+
+func validateRegistryAuthPlugin(c *Cluster) error {
+	for _, pr := range c.PrivateRegistriesMap {
+		if len(pr.CredentialPlugin) != 0 {
+			if credPluginType, ok := pr.CredentialPlugin["type"]; ok {
+				switch credPluginType {
+				case "ecr":
+					logrus.Debugf("Plugin type %s is valid", credPluginType)
+				default:
+					return fmt.Errorf("invalid registry plugin helper provided for %s", pr.URL)
+				}
+			}
 		}
 	}
 	return nil
