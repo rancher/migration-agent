@@ -22,7 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/net"
 )
 
-type agent struct {
+type Agent struct {
 	isETCD             bool
 	isControlPlane     bool
 	isWorker           bool
@@ -35,7 +35,7 @@ type agent struct {
 	disableETCDRestore bool
 }
 
-func (a *agent) Do(ctx context.Context) error {
+func (a *Agent) Do(ctx context.Context) error {
 	if a.isControlPlane || a.isETCD {
 		// certificate restoration
 		if err := certs.RecoverCertsFromState(ctx, a.controlConfig, a.fullState); err != nil {
@@ -70,7 +70,7 @@ func (a *agent) Do(ctx context.Context) error {
 	return nil
 }
 
-func New(ctx context.Context, sc *Context, config *MigrationConfig, k8sConn bool) (*agent, error) {
+func New(ctx context.Context, sc *Context, config *MigrationConfig, k8sConn bool) (*Agent, error) {
 	k3sConfig := get(config)
 	snapshotPath := config.Snapshot
 

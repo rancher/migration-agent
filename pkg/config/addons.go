@@ -40,6 +40,9 @@ func RemoveOldAddons(ctx context.Context, dataDir string) error {
 	manifestsDir := manifestsDir(dataDir)
 	manifestFile := filepath.Join(manifestsDir, "migration-agent-addons-remove.yaml")
 	err = os.MkdirAll(manifestsDir, 0755)
+	if err != nil {
+		return err
+	}
 	// deploy manifest file
 	return ioutil.WriteFile(manifestFile, []byte(yamlContent), 0600)
 }
