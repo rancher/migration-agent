@@ -113,7 +113,7 @@ func New(ctx context.Context, sc *Context, config *MigrationConfig, k8sConn bool
 		}
 	}
 
-	return &agent{
+	return &Agent{
 		fullState:          fullState,
 		snapshotPath:       snapshot,
 		dataDir:            config.DataDir,
