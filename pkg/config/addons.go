@@ -61,7 +61,7 @@ func job() *batch.Job {
 				},
 				Spec: core.PodSpec{
 					Volumes: []core.Volume{
-						core.Volume{
+						{
 							Name: "network-config",
 							VolumeSource: core.VolumeSource{
 								ConfigMap: &core.ConfigMapVolumeSource{
@@ -71,7 +71,7 @@ func job() *batch.Job {
 								},
 							},
 						},
-						core.Volume{
+						{
 							Name: "metrics-config",
 							VolumeSource: core.VolumeSource{
 								ConfigMap: &core.ConfigMapVolumeSource{
@@ -81,7 +81,7 @@ func job() *batch.Job {
 								},
 							},
 						},
-						core.Volume{
+						{
 							Name: "coredns-config",
 							VolumeSource: core.VolumeSource{
 								ConfigMap: &core.ConfigMapVolumeSource{
@@ -91,7 +91,7 @@ func job() *batch.Job {
 								},
 							},
 						},
-						core.Volume{
+						{
 							Name: "ingress-config",
 							VolumeSource: core.VolumeSource{
 								ConfigMap: &core.ConfigMapVolumeSource{
@@ -113,7 +113,7 @@ func job() *batch.Job {
 								"-c",
 								"kubectl delete -f /etc/rke_addon/network/" + networkConfigMap},
 							VolumeMounts: []core.VolumeMount{
-								core.VolumeMount{
+								{
 									Name:      "network-config",
 									MountPath: "/etc/rke_addon/network",
 								},
@@ -129,7 +129,7 @@ func job() *batch.Job {
 								"-c",
 								"kubectl delete -f /etc/rke_addon/coredns/" + corednsConfigMap},
 							VolumeMounts: []core.VolumeMount{
-								core.VolumeMount{
+								{
 									Name:      "coredns-config",
 									MountPath: "/etc/rke_addon/coredns",
 								},
@@ -144,7 +144,7 @@ func job() *batch.Job {
 								"-c",
 								"kubectl delete -f /etc/rke_addon/ingress/" + ingrerssConfigMap},
 							VolumeMounts: []core.VolumeMount{
-								core.VolumeMount{
+								{
 									Name:      "ingress-config",
 									MountPath: "/etc/rke_addon/ingress",
 								},
@@ -159,7 +159,7 @@ func job() *batch.Job {
 								"-c",
 								"kubectl delete -f /etc/rke_addon/metrics/" + metricsConfigMap},
 							VolumeMounts: []core.VolumeMount{
-								core.VolumeMount{
+								{
 									Name:      "metrics-config",
 									MountPath: "/etc/rke_addon/metrics",
 								},
