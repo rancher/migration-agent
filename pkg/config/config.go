@@ -197,6 +197,9 @@ func getRegistryTLSConfig(endpoint string, registriesTLS []string) *registries.T
 	var caCert, cert, key, url string
 	for _, registryTLS := range registriesTLS {
 		certs := strings.Split(registryTLS, ",")
+		if len(certs) < 4 {
+			continue
+		}
 		url = certs[0]
 		if url != endpoint {
 			continue
