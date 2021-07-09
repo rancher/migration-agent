@@ -33,6 +33,7 @@ type Agent struct {
 	controlConfig      *config.Control
 	sc                 *Context
 	disableETCDRestore bool
+	registries         []string
 }
 
 func (a *Agent) Do(ctx context.Context) error {
@@ -44,17 +45,14 @@ func (a *Agent) Do(ctx context.Context) error {
 		if err := migrationconfig.ExportClusterConfiguration(ctx, a.fullState, a.nodeName); err != nil {
 			return err
 		}
-	}
-	if a.isETCD && !a.disableETCDRestore {
-		// Do snapshot restore on the node
-		if err := etcdmigrate.Restore(ctx, a.controlConfig, a.fullState.CurrentState.CertificatesBundle[pki.KubeAPICertName]); err != nil {
+		if err := migrationconfig.RemoveOldAddons(ctx, a.dataDir); err != nil {
 			return err
 		}
 	}
 
-	// add the remove old addons job
-	if a.isControlPlane {
-		if err := migrationconfig.RemoveOldAddons(ctx, a.dataDir); err != nil {
+	if a.isETCD && !a.disableETCDRestore {
+		// Do snapshot restore on the node
+		if err := etcdmigrate.Restore(ctx, a.controlConfig, a.fullState.CurrentState.CertificatesBundle[pki.KubeAPICertName]); err != nil {
 			return err
 		}
 	}
@@ -67,7 +65,7 @@ func (a *Agent) Do(ctx context.Context) error {
 		}
 	}
 
-	return nil
+	return migrationconfig.ConfigurePrivateRegistries(ctx, a.fullState, a.registries)
 }
 
 func New(ctx context.Context, sc *Context, config *MigrationConfig, k8sConn bool) (*Agent, error) {
@@ -124,6 +122,7 @@ func New(ctx context.Context, sc *Context, config *MigrationConfig, k8sConn bool
 		isControlPlane:     controlplane,
 		nodeName:           node.HostnameOverride,
 		disableETCDRestore: config.DisableETCDRestore,
+		registries:         config.RegistriesTLS,
 	}, nil
 }
 
