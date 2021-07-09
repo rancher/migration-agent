@@ -96,7 +96,7 @@ func main() {
 		},
 		&cli.StringSliceFlag{
 			Name:  "registry",
-			Usage: "Configure private registry TLS paths, syntax should be <registry url>:<ca cert path>:<cert path>:<key path>",
+			Usage: "Configure private registry TLS paths, syntax should be <registry url>,<ca cert path>,<cert path>,<key path>",
 			Value: &config.RegistriesTLS,
 		},
 	}
