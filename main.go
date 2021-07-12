@@ -94,6 +94,11 @@ func main() {
 			Usage:       "Disable etcd restoration on the migrated node",
 			Destination: &config.DisableETCDRestore,
 		},
+		&cli.StringSliceFlag{
+			Name:  "registry",
+			Usage: "Configure private registry TLS paths, syntax should be <registry url>,<ca cert path>,<cert path>,<key path>",
+			Value: &config.RegistriesTLS,
+		},
 	}
 	app.Action = run
 

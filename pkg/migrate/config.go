@@ -1,5 +1,7 @@
 package migrate
 
+import "github.com/urfave/cli"
+
 type MigrationConfig struct {
 	KubeConfig          string
 	DataDir             string
@@ -14,4 +16,5 @@ type MigrationConfig struct {
 	EtcdS3Folder        string
 	NodeName            string
 	DisableETCDRestore  bool
+	RegistriesTLS       cli.StringSlice
 }

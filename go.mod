@@ -54,6 +54,7 @@ require (
 	github.com/rancher/k3s v1.21.1-rc1.0.20210701083441-4a6e87e5a207
 	github.com/rancher/lasso v0.0.0-20200905045615-7fcb07d6a20b // indirect
 	github.com/rancher/rke v1.2.7
+	github.com/rancher/wharfie v0.4.1
 	github.com/rancher/wrangler v0.6.2
 	github.com/rancher/wrangler-api v0.6.0
 	github.com/sirupsen/logrus v1.8.1
