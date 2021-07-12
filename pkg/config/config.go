@@ -216,10 +216,9 @@ func getRegistryTLSConfig(endpoint string, registriesTLS []string) *registries.T
 		cert = certs[2]
 		key = certs[3]
 	}
-	tlsConfig := &registries.TLSConfig{
+	return &registries.TLSConfig{
 		CAFile:   caCert,
 		CertFile: cert,
 		KeyFile:  key,
 	}
-	return tlsConfig
 }
