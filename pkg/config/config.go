@@ -209,7 +209,7 @@ func getRegistryTLSConfig(endpoint string, registriesTLS []string) *registries.T
 		}
 		// validating registry url
 		if _, err := url.ParseRequestURI(u); err != nil {
-			logrus.Warnf("regisrty url %s is invalid", u)
+			logrus.Warnf("registry url %s is invalid", u)
 			continue
 		}
 		caCert = certs[1]
