@@ -23,6 +23,7 @@ const (
 	privateRegistryPath = "/etc/rancher/rke2/registries.yaml"
 	kubeProxyConfig     = "kubeproxy.kubeconfig"
 	rkeClusterConfig    = "rke2-cluster-config"
+	registryFlagParts   = 4
 
 	calicoCNI = "calico"
 	canalCNI  = "canal"
@@ -197,7 +198,7 @@ func getRegistryTLSConfig(endpoint string, registriesTLS []string) *registries.T
 	var caCert, cert, key, url string
 	for _, registryTLS := range registriesTLS {
 		certs := strings.Split(registryTLS, ",")
-		if len(certs) < 4 {
+		if len(certs) < registryFlagParts {
 			continue
 		}
 		url = certs[0]
