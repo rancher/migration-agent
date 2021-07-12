@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"html/template"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/rancher/rke/cluster"
 	"github.com/rancher/rke/pki"
 	"github.com/rancher/wharfie/pkg/registries"
+	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/yaml"
 )
@@ -195,14 +197,19 @@ func getRegistryTLSConfig(endpoint string, registriesTLS []string) *registries.T
 	if len(registriesTLS) <= 0 {
 		return nil
 	}
-	var caCert, cert, key, url string
+	var caCert, cert, key, u string
 	for _, registryTLS := range registriesTLS {
 		certs := strings.Split(registryTLS, ",")
 		if len(certs) < registryFlagParts {
 			continue
 		}
-		url = certs[0]
-		if url != endpoint {
+		u = certs[0]
+		if u != endpoint {
+			continue
+		}
+		// validating registry url
+		if _, err := url.ParseRequestURI(u); err != nil {
+			logrus.Warnf("regisrty url %s is invalid", u)
 			continue
 		}
 		caCert = certs[1]
