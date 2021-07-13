@@ -42,7 +42,7 @@ func (a *Agent) Do(ctx context.Context) error {
 		if err := certs.RecoverCertsFromState(ctx, a.controlConfig, a.fullState); err != nil {
 			return err
 		}
-		if err := migrationconfig.ExportClusterConfiguration(ctx, a.fullState, a.nodeName); err != nil {
+		if err := migrationconfig.ExportClusterConfiguration(ctx, a.fullState, a.nodeName, true, a.registries); err != nil {
 			return err
 		}
 		if err := migrationconfig.RemoveOldAddons(ctx, a.dataDir); err != nil {
@@ -64,8 +64,7 @@ func (a *Agent) Do(ctx context.Context) error {
 			return err
 		}
 	}
-
-	return migrationconfig.ConfigurePrivateRegistries(ctx, a.fullState, a.registries)
+	return nil
 }
 
 func New(ctx context.Context, sc *Context, config *MigrationConfig, k8sConn bool) (*Agent, error) {
