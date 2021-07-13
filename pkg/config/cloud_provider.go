@@ -33,8 +33,9 @@ func migrateCloudProviders(fullState *cluster.FullState, args map[string]string)
 	return nil
 }
 
+// copy will copy the src file to destination and will create the base directory
+// of the destination first.
 func copy(src, dest string) error {
-	// create the dest directory
 	if err := os.MkdirAll(filepath.Dir(dest), 0700); err != nil {
 		return err
 	}

@@ -90,7 +90,7 @@ func ExportClusterConfiguration(ctx context.Context, fullState *cluster.FullStat
 	return ioutil.WriteFile(configPath, data, 0644)
 }
 
-// constructing an rke2 config file for server options
+// getServerConfig constructs an rke2 config file from rke1 server options.
 func getServerConfig(fullState *cluster.FullState, nodeName string) (map[string]string, error) {
 	services := fullState.CurrentState.RancherKubernetesEngineConfig.Services
 
