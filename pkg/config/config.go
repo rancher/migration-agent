@@ -57,6 +57,7 @@ users:
 )
 
 func ExportClusterConfiguration(ctx context.Context, fullState *cluster.FullState, nodeName string, server bool, registries []string) error {
+	logrus.Infof("Migrating cluster configuration from RKE state")
 	var (
 		args map[string]string
 		err  error
@@ -201,6 +202,7 @@ func configurePrivateRegistries(ctx context.Context, fullState *cluster.FullStat
 	if len(privateRegistryConfig) <= 0 {
 		return nil
 	}
+	logrus.Infof("Found Private registry configuration, migrating config to %s", privateRegistryPath)
 	if _, err := os.Stat(privateRegistryPath); err != nil {
 		if os.IsNotExist(err) {
 			r := registries.Registry{}

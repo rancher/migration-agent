@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/rancher/rke/cluster"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -20,6 +21,7 @@ func migrateCloudProviders(fullState *cluster.FullState, args map[string]string)
 	if cloudProviderName == "" {
 		return nil
 	}
+	logrus.Infof("Migrating RKE cloud provider config")
 	// add cloud config name to the args
 	args[cloudProviderNameFlag] = cloudProviderName
 	if _, err := os.Stat(cloudConfigFileRKE1); err == nil {
