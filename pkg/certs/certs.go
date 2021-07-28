@@ -10,6 +10,7 @@ import (
 	"github.com/rancher/k3s/pkg/daemons/config"
 	"github.com/rancher/rke/cluster"
 	"github.com/rancher/rke/pki"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -18,6 +19,7 @@ const (
 )
 
 func RecoverCertsFromState(ctx context.Context, config *config.Control, state *cluster.FullState) error {
+	logrus.Infof("Migrating CA certificates from RKE state file")
 	if err := setCertsAndDirs(config); err != nil {
 		return err
 	}

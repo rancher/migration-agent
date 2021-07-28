@@ -14,6 +14,7 @@ import (
 )
 
 func Restore(ctx context.Context, config *config.Control, apiCert pki.CertificatePKI) error {
+	logrus.Infof("Restoring etcd snapshot")
 	if _, err := os.Stat(apiCert.Path); err != nil {
 		if err := ioutil.WriteFile(apiCert.Path, []byte(apiCert.CertificatePEM), 0600); err != nil {
 			return err

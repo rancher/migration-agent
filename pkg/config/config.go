@@ -56,8 +56,28 @@ users:
 `))
 )
 
-func ExportClusterConfiguration(ctx context.Context, fullState *cluster.FullState, nodeName string) error {
-	args := getClusterConfig(fullState, nodeName)
+func ExportClusterConfiguration(ctx context.Context, fullState *cluster.FullState, nodeName string, server bool, registries []string) error {
+	logrus.Infof("Migrating cluster configuration from RKE state")
+	var (
+		args map[string]string
+		err  error
+	)
+	if server {
+		args, err = getServerConfig(fullState, nodeName)
+		if err != nil {
+			return err
+		}
+	} else {
+		args, err = getAgentConfig(fullState, nodeName)
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := configurePrivateRegistries(ctx, fullState, registries); err != nil {
+		return err
+	}
+
 	data, err := json.Marshal(args)
 	if err != nil {
 		return err
@@ -71,7 +91,8 @@ func ExportClusterConfiguration(ctx context.Context, fullState *cluster.FullStat
 	return ioutil.WriteFile(configPath, data, 0644)
 }
 
-func getClusterConfig(fullState *cluster.FullState, nodeName string) map[string]string {
+// getServerConfig constructs an rke2 config file from rke1 server options.
+func getServerConfig(fullState *cluster.FullState, nodeName string) (map[string]string, error) {
 	services := fullState.CurrentState.RancherKubernetesEngineConfig.Services
 
 	argsMap := map[string]string{
@@ -101,7 +122,28 @@ func getClusterConfig(fullState *cluster.FullState, nodeName string) map[string]
 		argsMap["cni"] = networkPlugin
 	}
 
-	return argsMap
+	if err := migrateCloudProviders(fullState, argsMap); err != nil {
+		return nil, err
+	}
+
+	return argsMap, nil
+}
+
+func getAgentConfig(fullState *cluster.FullState, nodeName string) (map[string]string, error) {
+	services := fullState.CurrentState.RancherKubernetesEngineConfig.Services
+
+	argsMap := map[string]string{
+		cmds.NodeNameFlag.Name: nodeName,
+	}
+	if len(services.Kubelet.ExtraArgs) > 0 {
+		argsMap[cmds.ExtraKubeletArgs.Name] = mapToString(services.Kubelet.ExtraArgs)
+	}
+
+	if err := migrateCloudProviders(fullState, argsMap); err != nil {
+		return nil, err
+	}
+
+	return argsMap, nil
 }
 
 func mapToString(args map[string]string) string {
@@ -155,11 +197,12 @@ func ExportKubeProxyConfig(fullState *cluster.FullState, dataDir string) error {
 	return nil
 }
 
-func ConfigurePrivateRegistries(ctx context.Context, fullState *cluster.FullState, registriesTLS []string) error {
+func configurePrivateRegistries(ctx context.Context, fullState *cluster.FullState, registriesTLS []string) error {
 	privateRegistryConfig := fullState.CurrentState.RancherKubernetesEngineConfig.PrivateRegistries
 	if len(privateRegistryConfig) <= 0 {
 		return nil
 	}
+	logrus.Infof("Found Private registry configuration, migrating config to %s", privateRegistryPath)
 	if _, err := os.Stat(privateRegistryPath); err != nil {
 		if os.IsNotExist(err) {
 			r := registries.Registry{}
@@ -184,6 +227,12 @@ func ConfigurePrivateRegistries(ctx context.Context, fullState *cluster.FullStat
 			if err != nil {
 				return err
 			}
+
+			// create a config.d file to add cluster config
+			if err := os.MkdirAll(filepath.Dir(privateRegistryPath), 0755); err != nil {
+				return err
+			}
+
 			if err := ioutil.WriteFile(privateRegistryPath, regBytes, 0600); err != nil {
 				return err
 			}

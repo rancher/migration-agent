@@ -42,7 +42,7 @@ func (a *Agent) Do(ctx context.Context) error {
 		if err := certs.RecoverCertsFromState(ctx, a.controlConfig, a.fullState); err != nil {
 			return err
 		}
-		if err := migrationconfig.ExportClusterConfiguration(ctx, a.fullState, a.nodeName); err != nil {
+		if err := migrationconfig.ExportClusterConfiguration(ctx, a.fullState, a.nodeName, true, a.registries); err != nil {
 			return err
 		}
 		if err := migrationconfig.RemoveOldAddons(ctx, a.dataDir); err != nil {
@@ -64,8 +64,7 @@ func (a *Agent) Do(ctx context.Context) error {
 			return err
 		}
 	}
-
-	return migrationconfig.ConfigurePrivateRegistries(ctx, a.fullState, a.registries)
+	return nil
 }
 
 func New(ctx context.Context, sc *Context, config *MigrationConfig, k8sConn bool) (*Agent, error) {
@@ -74,6 +73,7 @@ func New(ctx context.Context, sc *Context, config *MigrationConfig, k8sConn bool
 
 	// download s3 config if set
 	if config.EtcdS3BucketName != "" {
+		logrus.Infof("Downloading s3 snapshot")
 		s3, err := etcd.NewS3(ctx, k3sConfig)
 		if err != nil {
 			return nil, err
@@ -88,7 +88,9 @@ func New(ctx context.Context, sc *Context, config *MigrationConfig, k8sConn bool
 	}
 
 	// unzip and extract snapshot
-	snapshot, fullState, err := extractSnapshot(ctx, k3sConfig.ClusterResetRestorePath)
+	snapshotDir := filepath.Join(os.TempDir(), fmt.Sprintf("%s%d", decompressedPathPrefix, time.Now().Unix()))
+	logrus.Infof("Extracting snapshot to %s", snapshotDir)
+	snapshot, fullState, err := extractSnapshot(ctx, k3sConfig.ClusterResetRestorePath, snapshotDir)
 	if err != nil {
 		return nil, err
 	}
@@ -97,6 +99,7 @@ func New(ctx context.Context, sc *Context, config *MigrationConfig, k8sConn bool
 	if err != nil {
 		return nil, err
 	}
+	logrus.Infof("Node found in RKE state file")
 	k3sConfig.ClusterResetRestorePath = snapshot
 
 	var worker, etcd, controlplane bool
@@ -140,8 +143,7 @@ func get(mConfig *MigrationConfig) *config.Control {
 	}
 }
 
-func extractSnapshot(ctx context.Context, snapshotPath string) (string, *cluster.FullState, error) {
-	snapshotDir := filepath.Join(os.TempDir(), fmt.Sprintf("%s%d", decompressedPathPrefix, time.Now().Unix()))
+func extractSnapshot(ctx context.Context, snapshotPath, snapshotDir string) (string, *cluster.FullState, error) {
 	if err := unzip(snapshotPath, snapshotDir); err != nil {
 		return "", nil, err
 	}
@@ -167,10 +169,12 @@ func findNode(ctx context.Context, fullState *cluster.FullState, config *config.
 	if err != nil {
 		return nil, err
 	}
+	if overrideNodeName != "" {
+		logrus.Infof("Searching in RKE state file for node name %s passed to migration agent", overrideNodeName)
+	} else {
+		logrus.Infof("Searching for node %s with IP address %s in RKE state file", nodeName, nodeIP)
+	}
 	for _, node := range rkeNodes {
-		logrus.Infof("address: %v", node.Address)
-		logrus.Infof("internal address: %v", node.InternalAddress)
-		logrus.Infof("hostname: %v", node.HostnameOverride)
 		if overrideNodeName == node.Address || overrideNodeName == node.InternalAddress || overrideNodeName == node.HostnameOverride {
 			return &node, nil
 		}
@@ -182,6 +186,7 @@ func findNode(ctx context.Context, fullState *cluster.FullState, config *config.
 	// in case we cant find it by using the address on host we fallback
 	// to checking annotations for the private IPs since sometimes
 	// public IP is not bound to an interface (eg. ec2 instances)
+	logrus.Infof("Searching for node %s in kubernetes node object list", nodeName)
 	IPAnnotations := []string{
 		flannelPublicIPAnnotation,
 		calicoIPAnnotation,

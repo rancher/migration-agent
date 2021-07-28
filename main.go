@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/rancher/migration-agent/pkg/migrate"
 	"github.com/rancher/wrangler/pkg/kubeconfig"
@@ -16,6 +18,7 @@ var (
 	Version   = "v0.0.0-dev"
 	GitCommit = "HEAD"
 	config    migrate.MigrationConfig
+	logFile   string
 )
 
 func main() {
@@ -23,6 +26,13 @@ func main() {
 	app.Name = "migration-agent"
 	app.Version = fmt.Sprintf("%s (%s)", Version, GitCommit)
 	app.Usage = "Agent migrates rke files and data node to rke2"
+	app.Before = func(ctx *cli.Context) error {
+		if ctx.GlobalBool("debug") {
+			logrus.SetLevel(logrus.DebugLevel)
+			logrus.Debugf("Loglevel set to [%v]", logrus.DebugLevel)
+		}
+		return nil
+	}
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:        "kubeconfig",
@@ -99,15 +109,31 @@ func main() {
 			Usage: "Configure private registry TLS paths, syntax should be <registry url>,<ca cert path>,<cert path>,<key path>",
 			Value: &config.RegistriesTLS,
 		},
+		&cli.StringFlag{
+			Name:        "log-file",
+			Usage:       "Path to log file on disk",
+			Destination: &logFile,
+			Value:       "/var/lib/rancher/migration-agent/agent.log",
+		},
 	}
 	app.Action = run
-
 	if err := app.Run(os.Args); err != nil {
 		logrus.Fatal(err)
 	}
 }
 
 func run(c *cli.Context) {
+	// set up logging to disk
+	if err := os.MkdirAll(filepath.Dir(logFile), 0755); err != nil {
+		logrus.Fatalf("failed to create logging directory: %v", err)
+	}
+	f, err := os.OpenFile(logFile, os.O_WRONLY|os.O_CREATE, 0640)
+	if err != nil {
+		logrus.Fatalf("failed to open log file: %v", err)
+	}
+	mw := io.MultiWriter(os.Stdout, f)
+	logrus.SetOutput(mw)
+
 	logrus.Info("Starting agent")
 	ctx := signals.SetupSignalHandler(context.Background())
 
