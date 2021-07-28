@@ -127,7 +127,7 @@ func run(c *cli.Context) {
 	if err := os.MkdirAll(filepath.Dir(logFile), 0755); err != nil {
 		logrus.Fatalf("failed to create logging directory: %v", err)
 	}
-	f, err := os.OpenFile(logFile, os.O_WRONLY|os.O_CREATE, 0755)
+	f, err := os.OpenFile(logFile, os.O_WRONLY|os.O_CREATE, 0640)
 	if err != nil {
 		logrus.Fatalf("failed to open log file: %v", err)
 	}
