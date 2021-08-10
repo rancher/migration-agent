@@ -9,7 +9,6 @@ import (
 
 	helmv1 "github.com/k3s-io/helm-controller/pkg/apis/helm.cattle.io/v1"
 	"github.com/rancher/rke/cluster"
-	"github.com/sirupsen/logrus"
 	yamlv3 "gopkg.in/yaml.v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
@@ -73,7 +72,6 @@ func toHelmChartConfig(helmChartName string, values canalConfig) ([]byte, error)
 	if err != nil {
 		return nil, err
 	}
-	logrus.Info(string(valuesYaml))
 	hc := helmv1.HelmChartConfig{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "HelmChartConfig",
