@@ -48,6 +48,9 @@ func (a *Agent) Do(ctx context.Context) error {
 		if err := migrationconfig.RemoveOldAddons(ctx, a.dataDir); err != nil {
 			return err
 		}
+		if err := migrationconfig.MigrateCNIConfig(ctx, a.fullState, a.dataDir); err != nil {
+			return err
+		}
 	}
 
 	if a.isETCD && !a.disableETCDRestore {
