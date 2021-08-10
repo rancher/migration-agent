@@ -74,6 +74,10 @@ func ExportClusterConfiguration(ctx context.Context, fullState *cluster.FullStat
 		}
 	}
 
+	if err := migrateCloudProviders(fullState, args); err != nil {
+		return err
+	}
+
 	if err := configurePrivateRegistries(ctx, fullState, registries); err != nil {
 		return err
 	}
@@ -122,10 +126,6 @@ func getServerConfig(fullState *cluster.FullState, nodeName string) (map[string]
 		argsMap["cni"] = networkPlugin
 	}
 
-	if err := migrateCloudProviders(fullState, argsMap); err != nil {
-		return nil, err
-	}
-
 	return argsMap, nil
 }
 
@@ -137,10 +137,6 @@ func getAgentConfig(fullState *cluster.FullState, nodeName string) (map[string]s
 	}
 	if len(services.Kubelet.ExtraArgs) > 0 {
 		argsMap[cmds.ExtraKubeletArgs.Name] = mapToString(services.Kubelet.ExtraArgs)
-	}
-
-	if err := migrateCloudProviders(fullState, argsMap); err != nil {
-		return nil, err
 	}
 
 	return argsMap, nil
