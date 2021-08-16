@@ -29,10 +29,10 @@ type CanalConfig struct {
 }
 
 type CalicoConfig struct {
-	Installation CalicoInstallationSPec `json:"installation"`
+	Installation CalicoInstallationSpec `json:"installation"`
 }
 
-type CalicoInstallationSPec struct {
+type CalicoInstallationSpec struct {
 	CalicoNetwork            map[string]string `json:"calicoNetwork"`
 	FlexVolumePath           string            `json:"flexvolumepath"`
 	ControlPlaneNodeSelector map[string]string `json:"controlPlaneNodeSelector"`
@@ -54,7 +54,7 @@ func MigrateCNIConfig(ctx context.Context, fullState *cluster.FullState, dataDir
 
 	// migrate canal config to helm chart
 	if networkConfig.Plugin == canalCNI {
-		logrus.Infof("Canal CNI plugin is used by RKE1, migrating config to RKE2")
+		logrus.Info("Canal CNI plugin is used by RKE1, migrating config to RKE2")
 		canalCfg := CanalConfig{
 			Calico: map[string]string{
 				"vethuMTU":            strconv.Itoa(networkConfig.MTU),
@@ -70,9 +70,9 @@ func MigrateCNIConfig(ctx context.Context, fullState *cluster.FullState, dataDir
 			return err
 		}
 	} else if networkConfig.Plugin == calicoCNI {
-		logrus.Infof("Calico CNI plugin is used by RKE1, migrating config to RKE2")
+		logrus.Info("Calico CNI plugin is used by RKE1, migrating config to RKE2")
 		calicoCfg := CalicoConfig{
-			Installation: CalicoInstallationSPec{
+			Installation: CalicoInstallationSpec{
 				FlexVolumePath: networkConfig.Options[calicoFlexVolumePluginDir],
 				CalicoNetwork: map[string]string{
 					"mtu": strconv.Itoa(networkConfig.MTU),
@@ -91,7 +91,7 @@ func MigrateCNIConfig(ctx context.Context, fullState *cluster.FullState, dataDir
 
 	manifestsDir := manifestsDir(dataDir)
 	manifestFile := filepath.Join(manifestsDir, "rke2-"+networkConfig.Plugin+"-config.yaml")
-	err = os.MkdirAll(manifestsDir, 0755)
+	err = os.MkdirAll(manifestsDir, 0700)
 	if err != nil {
 		return err
 	}
@@ -106,17 +106,25 @@ func toHelmChartConfig(helmChartName string, values interface{}) ([]byte, error)
 		err        error
 	)
 	if helmChartName == "rke2-"+canalCNI {
-		valuesConfig := values.(CanalConfig)
-		valuesYaml, err = yamlv3.Marshal(&valuesConfig)
-		if err != nil {
-			return nil, err
+		valuesConfig, ok := values.(CanalConfig)
+		if ok {
+			valuesYaml, err = yamlv3.Marshal(&valuesConfig)
+			if err != nil {
+				return nil, err
+			}
 		}
 	} else if helmChartName == "rke2-"+calicoCNI {
-		valuesConfig := values.(CalicoConfig)
-		valuesYaml, err = yamlv3.Marshal(&valuesConfig)
-		if err != nil {
-			return nil, err
+		valuesConfig, ok := values.(CalicoConfig)
+		if ok {
+			valuesYaml, err = yamlv3.Marshal(&valuesConfig)
+			if err != nil {
+				return nil, err
+			}
 		}
+	}
+
+	if string(valuesYaml) == "" {
+		return nil, nil
 	}
 
 	hc := helmv1.HelmChartConfig{
