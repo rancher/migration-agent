@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"errors"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -107,20 +108,23 @@ func toHelmChartConfig(helmChartName string, values interface{}) ([]byte, error)
 	)
 	if helmChartName == "rke2-"+canalCNI {
 		valuesConfig, ok := values.(CanalConfig)
-		if ok {
-			valuesYaml, err = yamlv3.Marshal(&valuesConfig)
-			if err != nil {
-				return nil, err
-			}
+		if !ok {
+			return nil, errors.New("invalid RKE CanalConfig")
+		}
+		valuesYaml, err = yamlv3.Marshal(&valuesConfig)
+		if err != nil {
+			return nil, err
 		}
 	} else if helmChartName == "rke2-"+calicoCNI {
 		valuesConfig, ok := values.(CalicoConfig)
-		if ok {
-			valuesYaml, err = yamlv3.Marshal(&valuesConfig)
-			if err != nil {
-				return nil, err
-			}
+		if !ok {
+			return nil, errors.New("invalid RKE CalicoConfig")
 		}
+		valuesYaml, err = yamlv3.Marshal(&valuesConfig)
+		if err != nil {
+			return nil, err
+		}
+
 	}
 
 	if string(valuesYaml) == "" {
