@@ -278,7 +278,7 @@ func toYaml(obj runtime.Object) (string, error) {
 }
 
 // MigrateAddonsConfig should read the addons configuration and copy it
-// as a helm chart config to RKE2 and then save it to the manifest dir, this
+// as a helm chart config to RKE2 and then save it to the manifest dir.
 func MigrateAddonsConfig(ctx context.Context, fullState *cluster.FullState, dataDir string) error {
 	ingressCfg := fullState.CurrentState.RancherKubernetesEngineConfig.Ingress
 	if err := doMigrateNginxIngressAddon(ctx, ingressCfg, dataDir); err != nil {
