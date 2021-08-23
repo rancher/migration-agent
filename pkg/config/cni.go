@@ -11,7 +11,6 @@ import (
 	helmv1 "github.com/k3s-io/helm-controller/pkg/apis/helm.cattle.io/v1"
 	"github.com/rancher/rke/cluster"
 	"github.com/sirupsen/logrus"
-	yamlv3 "gopkg.in/yaml.v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 )
@@ -23,21 +22,6 @@ const (
 
 	calicoFlexVolumePluginDir = "calico_flex_volume_plugin_dir"
 )
-
-type CanalConfig struct {
-	Calico  map[string]string `json:"calico"`
-	Flannel map[string]string `json:"flannel"`
-}
-
-type CalicoConfig struct {
-	Installation CalicoInstallationSpec `json:"installation"`
-}
-
-type CalicoInstallationSpec struct {
-	CalicoNetwork            map[string]string `json:"calicoNetwork"`
-	FlexVolumePath           string            `json:"flexvolumepath"`
-	ControlPlaneNodeSelector map[string]string `json:"controlPlaneNodeSelector"`
-}
 
 // MigrateCNIConfig should read the cni plugin specific configuration and copy it
 // as a helm chart config to RKE2 and then save it to the manifest dir, this
@@ -75,8 +59,8 @@ func MigrateCNIConfig(ctx context.Context, fullState *cluster.FullState, dataDir
 		calicoCfg := CalicoConfig{
 			Installation: CalicoInstallationSpec{
 				FlexVolumePath: networkConfig.Options[calicoFlexVolumePluginDir],
-				CalicoNetwork: map[string]string{
-					"mtu": strconv.Itoa(networkConfig.MTU),
+				CalicoNetwork: map[string]int{
+					"mtu": networkConfig.MTU,
 				},
 				ControlPlaneNodeSelector: networkConfig.NodeSelector,
 			},
@@ -111,7 +95,7 @@ func toHelmChartConfig(helmChartName string, values interface{}) ([]byte, error)
 		if !ok {
 			return nil, errors.New("invalid RKE CanalConfig")
 		}
-		valuesYaml, err = yamlv3.Marshal(&valuesConfig)
+		valuesYaml, err = yaml.Marshal(&valuesConfig)
 		if err != nil {
 			return nil, err
 		}
@@ -120,11 +104,19 @@ func toHelmChartConfig(helmChartName string, values interface{}) ([]byte, error)
 		if !ok {
 			return nil, errors.New("invalid RKE CalicoConfig")
 		}
-		valuesYaml, err = yamlv3.Marshal(&valuesConfig)
+		valuesYaml, err = yaml.Marshal(&valuesConfig)
 		if err != nil {
 			return nil, err
 		}
-
+	} else if helmChartName == "rke2-"+nginxIngress {
+		valuesConfig, ok := values.(IngressConfig)
+		if !ok {
+			return nil, errors.New("invalid RKE Ingress Config")
+		}
+		valuesYaml, err = yaml.Marshal(&valuesConfig)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if string(valuesYaml) == "" {

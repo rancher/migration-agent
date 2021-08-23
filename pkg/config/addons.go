@@ -7,6 +7,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/rancher/rke/cluster"
+	"github.com/rancher/rke/types"
+	appsv1 "k8s.io/api/apps/v1"
 	batch "k8s.io/api/batch/v1"
 	core "k8s.io/api/core/v1"
 	rbac "k8s.io/api/rbac/v1"
@@ -272,4 +275,62 @@ func toYaml(obj runtime.Object) (string, error) {
 	}
 	yamlString := fmt.Sprintf("%s\n---\n", string(out))
 	return yamlString, nil
+}
+
+// MigrateAddonsConfig should read the addons configuration and copy it
+// as a helm chart config to RKE2 and then save it to the manifest dir, this
+func MigrateAddonsConfig(ctx context.Context, fullState *cluster.FullState, dataDir string) error {
+	ingressCfg := fullState.CurrentState.RancherKubernetesEngineConfig.Ingress
+	if err := doMigrateNginxIngressAddon(ctx, ingressCfg, dataDir); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func doMigrateNginxIngressAddon(ctx context.Context, ingressCfg types.IngressConfig, dataDir string) error {
+	if ingressCfg.Provider != "nginx" {
+		return nil
+	}
+	ingressValues := IngressConfig{
+		ControllerConfig: IngressControllerConfig{
+			Config:            ingressCfg.Options,
+			NodeSelector:      ingressCfg.NodeSelector,
+			ExtraArgs:         ingressCfg.ExtraArgs,
+			ExtraEnvs:         ingressCfg.ExtraEnvs,
+			ExtraVolumes:      ingressCfg.ExtraVolumes,
+			ExtraVolumeMounts: ingressCfg.ExtraVolumeMounts,
+			Tolerations:       ingressCfg.Tolerations,
+			DNSPolicy:         ingressCfg.DNSPolicy,
+			HostPorts: IngressHostPorts{
+				Ports: IngressPorts{
+					HTTPPort:  ingressCfg.HTTPPort,
+					HTTPSPort: ingressCfg.HTTPSPort,
+				},
+			},
+			PriorityClassName: ingressCfg.NginxIngressControllerPriorityClassName,
+		},
+		DefaultBackend: DefaultBackendConfig{
+			PriorityClassName: ingressCfg.DefaultHTTPBackendPriorityClassName,
+			Enabled:           *ingressCfg.DefaultBackend,
+		},
+	}
+	ingressValues.ControllerConfig.UpdateStrategy = &appsv1.DaemonSetUpdateStrategy{
+		Type:          ingressCfg.UpdateStrategy.Strategy,
+		RollingUpdate: ingressCfg.UpdateStrategy.RollingUpdate,
+	}
+	helmChartConfig, err := toHelmChartConfig("rke2-"+nginxIngress, ingressValues)
+	if err != nil {
+		return err
+	}
+
+	manifestsDir := manifestsDir(dataDir)
+	manifestFile := filepath.Join(manifestsDir, "rke2-"+nginxIngress+"-config.yaml")
+	err = os.MkdirAll(manifestsDir, 0700)
+	if err != nil {
+		return err
+	}
+
+	// deploy manifest file
+	return ioutil.WriteFile(manifestFile, helmChartConfig, 0600)
 }
