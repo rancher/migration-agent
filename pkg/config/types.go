@@ -43,8 +43,8 @@ type IngressControllerConfig struct {
 }
 
 type DefaultBackendConfig struct {
-	Enabled           bool   `json:"enabled,omitempty"`
 	PriorityClassName string `json:"priorityClassName,omitempty"`
+	Enabled           bool   `json:"enabled,omitempty"`
 }
 
 type IngressHostPorts struct {
