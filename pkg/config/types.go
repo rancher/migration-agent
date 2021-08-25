@@ -79,3 +79,12 @@ type AutoScalerConfig struct {
 type RBACConfig struct {
 	Create bool `json:"create,omitempty"`
 }
+
+type MetricsServerConfig struct {
+	PriorityClassName string            `json:"priorityClassName,omitempty"`
+	RBAC              RBACConfig        `json:"rbac,omitempty"`
+	Args              []string          `json:"args,omitempty"`
+	NodeSelector      map[string]string `json:"nodeSelector,omitempty"`
+	Replicas          int               `json:"replicas,omitempty"`
+	Tolerations       []v1.Toleration   `json:"tolerations,omitempty"`
+}

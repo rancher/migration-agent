@@ -27,11 +27,12 @@ const (
 	rkeClusterConfig    = "rke2-cluster-config"
 	registryFlagParts   = 4
 
-	calicoCNI    = "calico"
-	canalCNI     = "canal"
-	weaveCNI     = "weave"
-	nginxIngress = "ingress-nginx"
-	coredns      = "coredns"
+	calicoCNI     = "calico"
+	canalCNI      = "canal"
+	weaveCNI      = "weave"
+	nginxIngress  = "ingress-nginx"
+	coredns       = "coredns"
+	metricsServer = "metrics-server"
 )
 
 var (

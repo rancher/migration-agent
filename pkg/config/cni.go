@@ -126,6 +126,15 @@ func toHelmChartConfig(helmChartName string, values interface{}) ([]byte, error)
 		if err != nil {
 			return nil, err
 		}
+	} else if helmChartName == "rke2-"+metricsServer {
+		valuesConfig, ok := values.(MetricsServerConfig)
+		if !ok {
+			return nil, errors.New("invalid RKE Metrics Server Config")
+		}
+		valuesYaml, err = yaml.Marshal(&valuesConfig)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if string(valuesYaml) == "" {

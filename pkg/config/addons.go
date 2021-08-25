@@ -285,6 +285,10 @@ func MigrateAddonsConfig(ctx context.Context, fullState *cluster.FullState, data
 	if err := doMigrateCoreDNSAddon(ctx, coreDNSCfg, dataDir, rbac); err != nil {
 		return err
 	}
+	metricsServerCfg := fullState.CurrentState.RancherKubernetesEngineConfig.Monitoring
+	if err := doMigrateMetricsServer(ctx, &metricsServerCfg, dataDir, rbac); err != nil {
+		return err
+	}
 	ingressCfg := fullState.CurrentState.RancherKubernetesEngineConfig.Ingress
 	return doMigrateNginxIngressAddon(ctx, ingressCfg, dataDir)
 
@@ -382,4 +386,42 @@ func doMigrateCoreDNSAddon(ctx context.Context, corednsCfg *types.DNSConfig, dat
 
 	// deploy manifest file
 	return ioutil.WriteFile(manifestFile, helmChartConfig, 0600)
+}
+
+func doMigrateMetricsServer(ctx context.Context, metricsCfg *types.MonitoringConfig, dataDir string, rbac bool) error {
+	if metricsCfg.Provider != "metrics-server" {
+		return nil
+	}
+	metricsValues := MetricsServerConfig{
+		PriorityClassName: metricsCfg.MetricsServerPriorityClassName,
+		NodeSelector:      metricsCfg.NodeSelector,
+		Tolerations:       metricsCfg.Tolerations,
+		Replicas:          int(*metricsCfg.Replicas),
+		Args:              mapToSlice(metricsCfg.Options),
+		RBAC: RBACConfig{
+			Create: rbac,
+		},
+	}
+	helmChartConfig, err := toHelmChartConfig("rke2-"+metricsServer, metricsValues)
+	if err != nil {
+		return err
+	}
+
+	manifestsDir := manifestsDir(dataDir)
+	manifestFile := filepath.Join(manifestsDir, "rke2-"+metricsServer+"-config.yaml")
+	err = os.MkdirAll(manifestsDir, 0700)
+	if err != nil {
+		return err
+	}
+
+	// deploy manifest file
+	return ioutil.WriteFile(manifestFile, helmChartConfig, 0600)
+}
+
+func mapToSlice(args map[string]string) []string {
+	argsSlice := []string{}
+	for k, v := range args {
+		argsSlice = append(argsSlice, k+"="+v)
+	}
+	return argsSlice
 }
