@@ -280,12 +280,14 @@ func toYaml(obj runtime.Object) (string, error) {
 // MigrateAddonsConfig should read the addons configuration and copy it
 // as a helm chart config to RKE2 and then save it to the manifest dir.
 func MigrateAddonsConfig(ctx context.Context, fullState *cluster.FullState, dataDir string) error {
-	ingressCfg := fullState.CurrentState.RancherKubernetesEngineConfig.Ingress
-	if err := doMigrateNginxIngressAddon(ctx, ingressCfg, dataDir); err != nil {
+	coreDNSCfg := fullState.CurrentState.RancherKubernetesEngineConfig.DNS
+	rbac := (fullState.CurrentState.RancherKubernetesEngineConfig.Authorization.Mode == "rbac")
+	if err := doMigrateCoreDNSAddon(ctx, coreDNSCfg, dataDir, rbac); err != nil {
 		return err
 	}
+	ingressCfg := fullState.CurrentState.RancherKubernetesEngineConfig.Ingress
+	return doMigrateNginxIngressAddon(ctx, ingressCfg, dataDir)
 
-	return nil
 }
 
 func doMigrateNginxIngressAddon(ctx context.Context, ingressCfg types.IngressConfig, dataDir string) error {
@@ -326,6 +328,53 @@ func doMigrateNginxIngressAddon(ctx context.Context, ingressCfg types.IngressCon
 
 	manifestsDir := manifestsDir(dataDir)
 	manifestFile := filepath.Join(manifestsDir, "rke2-"+nginxIngress+"-config.yaml")
+	err = os.MkdirAll(manifestsDir, 0700)
+	if err != nil {
+		return err
+	}
+
+	// deploy manifest file
+	return ioutil.WriteFile(manifestFile, helmChartConfig, 0600)
+}
+
+func doMigrateCoreDNSAddon(ctx context.Context, corednsCfg *types.DNSConfig, dataDir string, rbac bool) error {
+	if corednsCfg.Provider != "coredns" {
+		return nil
+	}
+	dnsValues := CoreDNSConfig{
+		PriorityClassName: corednsCfg.Options[cluster.CoreDNSPriorityClassNameKey],
+		NodeSelector:      corednsCfg.NodeSelector,
+		RollingUpdate:     corednsCfg.UpdateStrategy.RollingUpdate,
+		Tolerations:       corednsCfg.Tolerations,
+		AutoScalerConfig: AutoScalerConfig{
+			Enabled:           true,
+			PriorityClassName: corednsCfg.Options[cluster.CoreDNSAutoscalerPriorityClassNameKey],
+		},
+		RBAC: RBACConfig{
+			Create: rbac,
+		},
+	}
+	if corednsCfg.LinearAutoscalerParams != nil {
+		dnsValues.AutoScalerConfig.CoresPerReplica = corednsCfg.LinearAutoscalerParams.CoresPerReplica
+		dnsValues.AutoScalerConfig.NodesPerReplica = corednsCfg.LinearAutoscalerParams.NodesPerReplica
+		dnsValues.AutoScalerConfig.Min = corednsCfg.LinearAutoscalerParams.Min
+		dnsValues.AutoScalerConfig.Max = corednsCfg.LinearAutoscalerParams.Max
+		dnsValues.AutoScalerConfig.PreventSinglePointFailure = corednsCfg.LinearAutoscalerParams.PreventSinglePointFailure
+	} else {
+		// add the default values in rke1 if params are not set
+		dnsValues.AutoScalerConfig.Min = 1
+		dnsValues.AutoScalerConfig.CoresPerReplica = 128
+		dnsValues.AutoScalerConfig.NodesPerReplica = 4
+		dnsValues.AutoScalerConfig.PreventSinglePointFailure = true
+
+	}
+	helmChartConfig, err := toHelmChartConfig("rke2-"+coredns, dnsValues)
+	if err != nil {
+		return err
+	}
+
+	manifestsDir := manifestsDir(dataDir)
+	manifestFile := filepath.Join(manifestsDir, "rke2-"+coredns+"-config.yaml")
 	err = os.MkdirAll(manifestsDir, 0700)
 	if err != nil {
 		return err

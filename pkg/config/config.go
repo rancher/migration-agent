@@ -31,6 +31,7 @@ const (
 	canalCNI     = "canal"
 	weaveCNI     = "weave"
 	nginxIngress = "ingress-nginx"
+	coredns      = "coredns"
 )
 
 var (

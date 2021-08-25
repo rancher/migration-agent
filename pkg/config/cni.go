@@ -117,6 +117,15 @@ func toHelmChartConfig(helmChartName string, values interface{}) ([]byte, error)
 		if err != nil {
 			return nil, err
 		}
+	} else if helmChartName == "rke2-"+coredns {
+		valuesConfig, ok := values.(CoreDNSConfig)
+		if !ok {
+			return nil, errors.New("invalid RKE DNS Config")
+		}
+		valuesYaml, err = yaml.Marshal(&valuesConfig)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if string(valuesYaml) == "" {

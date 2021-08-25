@@ -55,3 +55,27 @@ type IngressPorts struct {
 	HTTPPort  int `json:"http,omitempty"`
 	HTTPSPort int `json:"https,omitempty"`
 }
+
+type CoreDNSConfig struct {
+	PriorityClassName string                          `json:"priorityClassName,omitempty"`
+	NodeSelector      map[string]string               `json:"nodeSelector,omitempty"`
+	RollingUpdate     *appsv1.RollingUpdateDeployment `json:"rollingUpdate,omitempty"`
+	RBAC              RBACConfig                      `json:"rbac,omitempty"`
+	Tolerations       []v1.Toleration                 `json:"tolerations,omitempty"`
+	AutoScalerConfig  AutoScalerConfig                `json:"autoscaler,omitempty"`
+}
+
+type AutoScalerConfig struct {
+	PriorityClassName         string          `json:"priorityClassName,omitempty"`
+	Tolerations               []v1.Toleration `json:"tolerations,omitempty"`
+	CoresPerReplica           float64         `json:"coresPerReplica,omitempty"`
+	NodesPerReplica           float64         `json:"nodesPerReplica,omitempty"`
+	Min                       int             `json:"min,omitempty"`
+	Max                       int             `json:"max,omitempty"`
+	PreventSinglePointFailure bool            `json:"preventSinglePointFailure,omitempty"`
+	Enabled                   bool            `json:"enabled,omitempty"`
+}
+
+type RBACConfig struct {
+	Create bool `json:"create,omitempty"`
+}
