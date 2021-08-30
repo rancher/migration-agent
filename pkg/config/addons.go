@@ -419,7 +419,7 @@ func doMigrateMetricsServer(ctx context.Context, metricsCfg *types.MonitoringCon
 }
 
 func mapToSlice(args map[string]string) []string {
-	argsSlice := []string{}
+	argsSlice := make([]string, len(args))
 	for k, v := range args {
 		argsSlice = append(argsSlice, k+"="+v)
 	}
