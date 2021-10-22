@@ -9,6 +9,7 @@ import (
 
 	"github.com/rancher/rke/cluster"
 	"github.com/rancher/rke/types"
+	v1 "github.com/rancher/wrangler-api/pkg/generated/controllers/core/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	batch "k8s.io/api/batch/v1"
 	core "k8s.io/api/core/v1"
@@ -19,10 +20,12 @@ import (
 )
 
 const (
-	corednsConfigMap  = "rke-coredns-addon"
-	ingrerssConfigMap = "rke-ingress-controller"
-	metricsConfigMap  = "rke-metrics-addon"
-	networkConfigMap  = "rke-network-plugin"
+	corednsConfigMap           = "rke-coredns-addon"
+	ingrerssConfigMap          = "rke-ingress-controller"
+	metricsConfigMap           = "rke-metrics-addon"
+	networkConfigMap           = "rke-network-plugin"
+	userAddonsConfigMap        = "rke2-user-addons"
+	userAddonsIncludeConfigMap = "rke-user-includes-addons"
 )
 
 func manifestsDir(dataDir string) string {
@@ -424,4 +427,46 @@ func mapToSlice(args map[string]string) []string {
 		argsSlice = append(argsSlice, k+"="+v)
 	}
 	return argsSlice
+}
+
+// MigrateUserAddonsConfig should read the user addons configuration and copy it
+// to RKE2 and then save it to the manifest dir.
+func MigrateUserAddonsConfig(ctx context.Context, fullState *cluster.FullState, dataDir string, configMap v1.ConfigMapController) error {
+	userAddons := fullState.CurrentState.RancherKubernetesEngineConfig.Addons
+	userAddonsInclude := fullState.CurrentState.RancherKubernetesEngineConfig.AddonsInclude
+	if err := doMigrateUserAddons(ctx, userAddons, dataDir); err != nil {
+		return err
+	}
+	return doMigrateUserAddonsInclude(ctx, userAddonsInclude, dataDir, configMap)
+}
+
+// doMigrateUserAddons will just deploy the useraddons paremeter of cluster.rkestate to the manifest dir
+func doMigrateUserAddons(ctx context.Context, userAddons string, dataDir string) error {
+	if userAddons == "" {
+		return nil
+	}
+	manifestsDir := manifestsDir(dataDir)
+	manifestFile := filepath.Join(manifestsDir, userAddonsConfigMap+".yaml")
+	if err := os.MkdirAll(manifestsDir, 0700); err != nil {
+		return err
+	}
+	// deploy manifest file
+	return ioutil.WriteFile(manifestFile, []byte(userAddons), 0600)
+}
+
+// doMigrateUserAddonsInclude will just deploy the useraddons paremeter of cluster.rkestate to the manifest dir
+func doMigrateUserAddonsInclude(ctx context.Context, userAddonsInclude []string, dataDir string, configMap v1.ConfigMapController) error {
+	if len(userAddonsInclude) == 0 {
+		return nil
+	}
+	addonsConfigMap, err := configMap.Get("kube-system", userAddonsIncludeConfigMap, meta.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	manifestsDir := manifestsDir(dataDir)
+	manifestFile := filepath.Join(manifestsDir, userAddonsIncludeConfigMap+".yaml")
+
+	// deploy manifest file
+	return ioutil.WriteFile(manifestFile, []byte(addonsConfigMap.Data[userAddonsIncludeConfigMap]), 0600)
 }
