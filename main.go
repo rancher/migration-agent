@@ -115,6 +115,36 @@ func main() {
 			Destination: &logFile,
 			Value:       "/var/lib/rancher/migration-agent/agent.log",
 		},
+		&cli.BoolFlag{
+			Name:        "disable-node-search",
+			Usage:       "Disable search for node name in rke state file, must be used with --server or --agent flags",
+			Destination: &config.DisableNodeSearch,
+		},
+		&cli.BoolFlag{
+			Name:        "server",
+			Usage:       "Use this node as a server",
+			Destination: &config.ServerNode,
+		},
+		&cli.BoolFlag{
+			Name:        "agent",
+			Usage:       "Use this node as an agent",
+			Destination: &config.AgentNode,
+		},
+		&cli.BoolFlag{
+			Name:        "disable-addons-migrate",
+			Usage:       "Disable migrating addons configuration",
+			Destination: &config.DisableAddonsMigrate,
+		},
+		&cli.BoolFlag{
+			Name:        "disable-user-addons-migrate",
+			Usage:       "Disable migrating user addons configuration",
+			Destination: &config.DisableUserAddonsMigrate,
+		},
+		&cli.BoolFlag{
+			Name:        "disable-cni-migrate",
+			Usage:       "Disable migrating CNI configuration",
+			Destination: &config.DisableCNIMigrate,
+		},
 	}
 	app.Action = run
 	if err := app.Run(os.Args); err != nil {
