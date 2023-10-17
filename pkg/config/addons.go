@@ -9,6 +9,7 @@ import (
 	"github.com/rancher/rke/cluster"
 	"github.com/rancher/rke/types"
 	v1 "github.com/rancher/wrangler-api/pkg/generated/controllers/core/v1"
+	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	batch "k8s.io/api/batch/v1"
 	core "k8s.io/api/core/v1"
@@ -457,6 +458,10 @@ func doMigrateUserAddons(ctx context.Context, userAddons string, dataDir string)
 
 // doMigrateUserAddonsInclude will just deploy the useraddons paremeter of cluster.rkestate to the manifest dir
 func doMigrateUserAddonsInclude(ctx context.Context, userAddonsInclude []string, dataDir string, configMap v1.ConfigMapController) error {
+	if configMap == nil {
+		logrus.Warnf("no configmap controller defined")
+		return nil
+	}
 	if len(userAddonsInclude) == 0 {
 		return nil
 	}

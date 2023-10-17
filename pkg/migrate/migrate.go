@@ -66,9 +66,16 @@ func (a *Agent) Do(ctx context.Context) error {
 			}
 		}
 		if !a.disableUserAddonsMigrate {
-			if err := migrationconfig.MigrateUserAddonsConfig(ctx, a.fullState, a.dataDir, a.sc.Core.Core().V1().ConfigMap()); err != nil {
-				return err
+			if a.sc == nil {
+				if err := migrationconfig.MigrateUserAddonsConfig(ctx, a.fullState, a.dataDir, nil); err != nil {
+					return err
+				}
+			} else {
+				if err := migrationconfig.MigrateUserAddonsConfig(ctx, a.fullState, a.dataDir, a.sc.Core.Core().V1().ConfigMap()); err != nil {
+					return err
+				}
 			}
+
 		}
 	}
 
