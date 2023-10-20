@@ -130,6 +130,9 @@ platform:
   os: linux
   arch: arm
 
+clone:
+  retries: 3
+
 steps:
 - name: build
   image: rancher/dapper:v0.5.0
