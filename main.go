@@ -36,7 +36,6 @@ func main() {
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:        "kubeconfig",
-			EnvVar:      "KUBECONFIG",
 			Destination: &config.KubeConfig,
 		},
 		cli.StringFlag{
@@ -115,6 +114,36 @@ func main() {
 			Destination: &logFile,
 			Value:       "/var/lib/rancher/migration-agent/agent.log",
 		},
+		&cli.BoolFlag{
+			Name:        "disable-node-search",
+			Usage:       "Disable search for node name in rke state file, must be used with --server or --agent flags",
+			Destination: &config.DisableNodeSearch,
+		},
+		&cli.BoolFlag{
+			Name:        "server",
+			Usage:       "Use this node as a server",
+			Destination: &config.ServerNode,
+		},
+		&cli.BoolFlag{
+			Name:        "agent",
+			Usage:       "Use this node as an agent",
+			Destination: &config.AgentNode,
+		},
+		&cli.BoolFlag{
+			Name:        "disable-addons-migrate",
+			Usage:       "Disable migrating addons configuration",
+			Destination: &config.DisableAddonsMigrate,
+		},
+		&cli.BoolFlag{
+			Name:        "disable-user-addons-migrate",
+			Usage:       "Disable migrating user addons configuration",
+			Destination: &config.DisableUserAddonsMigrate,
+		},
+		&cli.BoolFlag{
+			Name:        "disable-cni-migrate",
+			Usage:       "Disable migrating CNI configuration",
+			Destination: &config.DisableCNIMigrate,
+		},
 	}
 	app.Action = run
 	if err := app.Run(os.Args); err != nil {
@@ -137,22 +166,24 @@ func run(c *cli.Context) {
 	logrus.Info("Starting agent")
 	ctx := signals.SetupSignalHandler(context.Background())
 
-	kubeConfig, err := kubeconfig.GetNonInteractiveClientConfig(config.KubeConfig).ClientConfig()
-	if err != nil {
-		logrus.Fatalf("failed to find kubeconfig: %v", err)
-	}
-
 	var k8sConn bool
-	sc, err := migrate.NewContext(ctx, kubeConfig)
-	if err != nil {
-		if config.NodeName == "" {
-			logrus.Fatalf("failed to find establish kubernetes connection and node-name is empty: %v", err)
+	var sc *migrate.Context
+	if config.KubeConfig != "" {
+		kubeConfig, err := kubeconfig.GetNonInteractiveClientConfig(config.KubeConfig).ClientConfig()
+		if err != nil {
+			logrus.Fatalf("failed to find kubeconfig: %v", err)
 		}
-		logrus.Warnf("failed to establish kubernetes connection, will use node-name statically")
-	} else {
-		k8sConn = true
-		if err := sc.Start(ctx); err != nil {
-			logrus.Fatalf("failed to start factories: %v", err)
+		sc, err := migrate.NewContext(ctx, kubeConfig)
+		if err != nil {
+			if config.NodeName == "" {
+				logrus.Fatalf("failed to find establish kubernetes connection and node-name is empty: %v", err)
+			}
+			logrus.Warnf("failed to establish kubernetes connection, will use node-name statically")
+		} else {
+			k8sConn = true
+			if err := sc.Start(ctx); err != nil {
+				logrus.Fatalf("failed to start factories: %v", err)
+			}
 		}
 	}
 

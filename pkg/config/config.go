@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"html/template"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -95,7 +94,7 @@ func ExportClusterConfiguration(ctx context.Context, fullState *cluster.FullStat
 	}
 
 	configPath := filepath.Join(configDir, "10-migration.yaml")
-	return ioutil.WriteFile(configPath, data, 0644)
+	return os.WriteFile(configPath, data, 0644)
 }
 
 // getServerConfig constructs an rke2 config file from rke1 server options.
@@ -232,7 +231,7 @@ func configurePrivateRegistries(ctx context.Context, fullState *cluster.FullStat
 				return err
 			}
 
-			if err := ioutil.WriteFile(privateRegistryPath, regBytes, 0600); err != nil {
+			if err := os.WriteFile(privateRegistryPath, regBytes, 0600); err != nil {
 				return err
 			}
 		}

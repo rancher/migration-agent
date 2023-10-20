@@ -2,7 +2,6 @@ package certs
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -111,11 +110,11 @@ func writeFile(cert pki.CertificatePKI, fileType int, certPaths ...string) error
 			return errors.Wrapf(err, "failed to mkdir %s", filepath.Dir(path))
 		}
 		if fileType == certType {
-			if err := ioutil.WriteFile(path, []byte(cert.CertificatePEM), 0600); err != nil {
+			if err := os.WriteFile(path, []byte(cert.CertificatePEM), 0600); err != nil {
 				return errors.Wrapf(err, "failed to write to %s", path)
 			}
 		} else if fileType == keyType {
-			if err := ioutil.WriteFile(path, []byte(cert.KeyPEM), 0600); err != nil {
+			if err := os.WriteFile(path, []byte(cert.KeyPEM), 0600); err != nil {
 				return errors.Wrapf(err, "failed to write to %s", path)
 			}
 		}

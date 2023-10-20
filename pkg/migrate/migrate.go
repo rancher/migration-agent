@@ -23,39 +23,59 @@ import (
 )
 
 type Agent struct {
-	isETCD             bool
-	isControlPlane     bool
-	isWorker           bool
-	nodeName           string
-	fullState          *cluster.FullState
-	snapshotPath       string
-	dataDir            string
-	controlConfig      *config.Control
-	sc                 *Context
-	disableETCDRestore bool
-	registries         []string
+	isETCD                   bool
+	isControlPlane           bool
+	isWorker                 bool
+	nodeName                 string
+	fullState                *cluster.FullState
+	snapshotPath             string
+	dataDir                  string
+	controlConfig            *config.Control
+	sc                       *Context
+	registries               []string
+	disableETCDRestore       bool
+	disableAddonsMigrate     bool
+	disableUserAddonsMigrate bool
+	disableCNIMigrate        bool
 }
 
 func (a *Agent) Do(ctx context.Context) error {
 	if a.isControlPlane || a.isETCD {
-		// certificate restoration
+		// certificate restoration from rkestate file
 		if err := certs.RecoverCertsFromState(ctx, a.controlConfig, a.fullState); err != nil {
 			return err
 		}
+
 		if err := migrationconfig.ExportClusterConfiguration(ctx, a.fullState, a.nodeName, true, a.registries); err != nil {
 			return err
 		}
+
+		if !a.disableCNIMigrate {
+			if err := migrationconfig.MigrateCNIConfig(ctx, a.fullState, a.dataDir); err != nil {
+				return err
+			}
+		}
+		// removing old addons and cni
 		if err := migrationconfig.RemoveOldAddons(ctx, a.dataDir); err != nil {
 			return err
 		}
-		if err := migrationconfig.MigrateCNIConfig(ctx, a.fullState, a.dataDir); err != nil {
-			return err
+
+		if !a.disableAddonsMigrate {
+			if err := migrationconfig.MigrateAddonsConfig(ctx, a.fullState, a.dataDir); err != nil {
+				return err
+			}
 		}
-		if err := migrationconfig.MigrateAddonsConfig(ctx, a.fullState, a.dataDir); err != nil {
-			return err
-		}
-		if err := migrationconfig.MigrateUserAddonsConfig(ctx, a.fullState, a.dataDir, a.sc.Core.Core().V1().ConfigMap()); err != nil {
-			return err
+		if !a.disableUserAddonsMigrate {
+			if a.sc == nil {
+				if err := migrationconfig.MigrateUserAddonsConfig(ctx, a.fullState, a.dataDir, nil); err != nil {
+					return err
+				}
+			} else {
+				if err := migrationconfig.MigrateUserAddonsConfig(ctx, a.fullState, a.dataDir, a.sc.Core.Core().V1().ConfigMap()); err != nil {
+					return err
+				}
+			}
+
 		}
 	}
 
@@ -103,38 +123,65 @@ func New(ctx context.Context, sc *Context, config *MigrationConfig, k8sConn bool
 	if err != nil {
 		return nil, err
 	}
-	// find the node roles
-	node, err := findNode(ctx, fullState, k3sConfig, sc, config.NodeName, k8sConn)
-	if err != nil {
-		return nil, err
-	}
-	logrus.Infof("Node found in RKE state file")
 	k3sConfig.ClusterResetRestorePath = snapshot
-
-	var worker, etcd, controlplane bool
-	for _, role := range node.Role {
-		switch role {
-		case controlPlaneRole:
-			controlplane = true
-		case workerRole:
-			worker = true
-		case etcdRole:
-			etcd = true
+	var (
+		worker, etcd, controlplane bool
+		hostnameOverride           string
+	)
+	if config.DisableNodeSearch {
+		if !config.AgentNode && !config.ServerNode {
+			logrus.Fatalf("node should be either a server or an agent")
 		}
+		if config.ServerNode {
+			etcd = true
+			controlplane = true
+			worker = true
+		}
+		if config.AgentNode {
+			worker = true
+		}
+		// get nodeName and IP from the machine
+		nodeName, nodeIP, err := getHostnameAndIP()
+		if err != nil {
+			return nil, err
+		}
+		hostnameOverride = nodeName
+		k3sConfig.PrivateIP = nodeIP
+	} else {
+		// find the node roles
+		node, err := findNode(ctx, fullState, k3sConfig, sc, config.NodeName, k8sConn)
+		if err != nil {
+			return nil, err
+		}
+		logrus.Infof("Node found in RKE state file")
+		for _, role := range node.Role {
+			switch role {
+			case controlPlaneRole:
+				controlplane = true
+			case workerRole:
+				worker = true
+			case etcdRole:
+				etcd = true
+			}
+		}
+		hostnameOverride = node.HostnameOverride
 	}
 
 	return &Agent{
-		fullState:          fullState,
-		snapshotPath:       snapshot,
-		dataDir:            config.DataDir,
-		controlConfig:      k3sConfig,
-		sc:                 sc,
-		isETCD:             etcd,
-		isWorker:           worker,
-		isControlPlane:     controlplane,
-		nodeName:           node.HostnameOverride,
-		disableETCDRestore: config.DisableETCDRestore,
-		registries:         config.RegistriesTLS,
+		fullState:                fullState,
+		snapshotPath:             snapshot,
+		dataDir:                  config.DataDir,
+		controlConfig:            k3sConfig,
+		sc:                       sc,
+		isETCD:                   etcd,
+		isWorker:                 worker,
+		isControlPlane:           controlplane,
+		nodeName:                 hostnameOverride,
+		disableETCDRestore:       config.DisableETCDRestore,
+		disableAddonsMigrate:     config.DisableAddonsMigrate,
+		disableUserAddonsMigrate: config.DisableUserAddonsMigrate,
+		disableCNIMigrate:        config.DisableCNIMigrate,
+		registries:               config.RegistriesTLS,
 	}, nil
 }
 

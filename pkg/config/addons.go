@@ -3,13 +3,13 @@ package config
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
 	"github.com/rancher/rke/cluster"
 	"github.com/rancher/rke/types"
 	v1 "github.com/rancher/wrangler-api/pkg/generated/controllers/core/v1"
+	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	batch "k8s.io/api/batch/v1"
 	core "k8s.io/api/core/v1"
@@ -50,10 +50,11 @@ func RemoveOldAddons(ctx context.Context, dataDir string) error {
 		return err
 	}
 	// deploy manifest file
-	return ioutil.WriteFile(manifestFile, []byte(yamlContent), 0600)
+	return os.WriteFile(manifestFile, []byte(yamlContent), 0600)
 }
 
 func job() *batch.Job {
+	backoffLimit := int32(20)
 	job := &batch.Job{
 		TypeMeta: meta.TypeMeta{
 			APIVersion: "batch/v1",
@@ -64,6 +65,7 @@ func job() *batch.Job {
 			Namespace: "kube-system",
 		},
 		Spec: batch.JobSpec{
+			BackoffLimit: &backoffLimit,
 			Template: core.PodTemplateSpec{
 				ObjectMeta: meta.ObjectMeta{
 					Annotations: map[string]string{},
@@ -222,7 +224,7 @@ func job() *batch.Job {
 func roleBinding() *rbac.ClusterRoleBinding {
 	return &rbac.ClusterRoleBinding{
 		TypeMeta: meta.TypeMeta{
-			APIVersion: "rbac.authorization.k8s.io/v1beta1",
+			APIVersion: "rbac.authorization.k8s.io/v1",
 			Kind:       "ClusterRoleBinding",
 		},
 		ObjectMeta: meta.ObjectMeta{
@@ -341,7 +343,7 @@ func doMigrateNginxIngressAddon(ctx context.Context, ingressCfg types.IngressCon
 	}
 
 	// deploy manifest file
-	return ioutil.WriteFile(manifestFile, helmChartConfig, 0600)
+	return os.WriteFile(manifestFile, helmChartConfig, 0600)
 }
 
 func doMigrateCoreDNSAddon(ctx context.Context, corednsCfg *types.DNSConfig, dataDir string, rbac bool) error {
@@ -388,7 +390,7 @@ func doMigrateCoreDNSAddon(ctx context.Context, corednsCfg *types.DNSConfig, dat
 	}
 
 	// deploy manifest file
-	return ioutil.WriteFile(manifestFile, helmChartConfig, 0600)
+	return os.WriteFile(manifestFile, helmChartConfig, 0600)
 }
 
 func doMigrateMetricsServer(ctx context.Context, metricsCfg *types.MonitoringConfig, dataDir string, rbac bool) error {
@@ -418,7 +420,7 @@ func doMigrateMetricsServer(ctx context.Context, metricsCfg *types.MonitoringCon
 	}
 
 	// deploy manifest file
-	return ioutil.WriteFile(manifestFile, helmChartConfig, 0600)
+	return os.WriteFile(manifestFile, helmChartConfig, 0600)
 }
 
 func mapToSlice(args map[string]string) []string {
@@ -451,11 +453,15 @@ func doMigrateUserAddons(ctx context.Context, userAddons string, dataDir string)
 		return err
 	}
 	// deploy manifest file
-	return ioutil.WriteFile(manifestFile, []byte(userAddons), 0600)
+	return os.WriteFile(manifestFile, []byte(userAddons), 0600)
 }
 
 // doMigrateUserAddonsInclude will just deploy the useraddons paremeter of cluster.rkestate to the manifest dir
 func doMigrateUserAddonsInclude(ctx context.Context, userAddonsInclude []string, dataDir string, configMap v1.ConfigMapController) error {
+	if configMap == nil {
+		logrus.Warnf("no configmap controller defined")
+		return nil
+	}
 	if len(userAddonsInclude) == 0 {
 		return nil
 	}
@@ -468,5 +474,5 @@ func doMigrateUserAddonsInclude(ctx context.Context, userAddonsInclude []string,
 	manifestFile := filepath.Join(manifestsDir, userAddonsIncludeConfigMap+".yaml")
 
 	// deploy manifest file
-	return ioutil.WriteFile(manifestFile, []byte(addonsConfigMap.Data[userAddonsIncludeConfigMap]), 0600)
+	return os.WriteFile(manifestFile, []byte(addonsConfigMap.Data[userAddonsIncludeConfigMap]), 0600)
 }

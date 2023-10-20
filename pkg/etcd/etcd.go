@@ -2,7 +2,6 @@ package etcd
 
 import (
 	"context"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,12 +15,18 @@ import (
 func Restore(ctx context.Context, config *config.Control, apiCert pki.CertificatePKI) error {
 	logrus.Infof("Restoring etcd snapshot")
 	if _, err := os.Stat(apiCert.Path); err != nil {
-		if err := ioutil.WriteFile(apiCert.Path, []byte(apiCert.CertificatePEM), 0600); err != nil {
+		if err := os.MkdirAll(filepath.Dir(apiCert.Path), 0644); err != nil {
+			return err
+		}
+		if err := os.WriteFile(apiCert.Path, []byte(apiCert.CertificatePEM), 0600); err != nil {
 			return err
 		}
 	}
 	if _, err := os.Stat(apiCert.KeyPath); err != nil {
-		if err := ioutil.WriteFile(apiCert.KeyPath, []byte(apiCert.KeyPEM), 0600); err != nil {
+		if err := os.MkdirAll(filepath.Dir(apiCert.KeyPath), 0644); err != nil {
+			return err
+		}
+		if err := os.WriteFile(apiCert.KeyPath, []byte(apiCert.KeyPEM), 0600); err != nil {
 			return err
 		}
 	}
@@ -44,7 +49,7 @@ func Restore(ctx context.Context, config *config.Control, apiCert pki.Certificat
 
 	// wite the tombstone file to db dir
 	tombstoneFile := filepath.Join(config.DataDir, "db", "tombstone")
-	if err := ioutil.WriteFile(tombstoneFile, []byte{}, 0600); err != nil {
+	if err := os.WriteFile(tombstoneFile, []byte{}, 0600); err != nil {
 		logrus.Fatalf("failed to write tombstone file to %s", tombstoneFile)
 	}
 

@@ -3,7 +3,6 @@ package config
 import (
 	"context"
 	"errors"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -82,7 +81,7 @@ func MigrateCNIConfig(ctx context.Context, fullState *cluster.FullState, dataDir
 	}
 
 	// deploy manifest file
-	return ioutil.WriteFile(manifestFile, helmChartConfig, 0600)
+	return os.WriteFile(manifestFile, helmChartConfig, 0600)
 }
 
 func toHelmChartConfig(helmChartName string, values interface{}) ([]byte, error) {
