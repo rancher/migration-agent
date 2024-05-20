@@ -15,4 +15,6 @@ CGO_ENABLED=0 go build -ldflags "$LINKFLAGS $OTHER_LINKFLAGS" -o bin/migration-a
 if [ "$CROSS" = "true" ] && [ "$ARCH" = "amd64" ]; then
     GOOS=darwin go build -ldflags "$LINKFLAGS" -o bin/migration-agent-darwin
     GOOS=windows go build -ldflags "$LINKFLAGS" -o bin/migration-agent-windows
+    CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "$LINKFLAGS $OTHER_LINKFLAGS" -o bin/migration-agent-arm64
+    CGO_ENABLED=0 GOOS=linux GOARCH=arm go build -ldflags "$LINKFLAGS $OTHER_LINKFLAGS" -o bin/migration-agent-arm
 fi
