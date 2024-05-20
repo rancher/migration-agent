@@ -19,6 +19,7 @@ jobs:
         make ci
       env:
         CROSS: "true"
+        GH_TAG: ${{ github.ref_name }}
     
     - name: "Read secrets"
       uses: rancher-eio/read-vault-secrets@main

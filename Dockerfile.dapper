@@ -14,7 +14,7 @@ RUN if [ "$(go env GOARCH)" = "amd64" ]; then \
     fi
 
 ENV GO111MODULE on
-ENV DAPPER_ENV REPO TAG DRONE_TAG CROSS
+ENV DAPPER_ENV REPO TAG CROSS
 ENV DAPPER_SOURCE /go/src/github.com/rancher/migration-agent/
 ENV DAPPER_OUTPUT ./bin ./dist
 ENV DAPPER_DOCKER_SOCKET true
